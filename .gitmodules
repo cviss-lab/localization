@@ -1,0 +1,3 @@
+[submodule "src/hloc_toolbox"]
+	path = src/hloc_toolbox
+	url = git@github.com:zaalsabb/Hierarchical-Localization.git

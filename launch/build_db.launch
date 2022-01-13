@@ -1,0 +1,28 @@
+<launch>
+
+  <!--- Input args -->
+  <!-- <arg name="image" default="/F1/image_rect"/>
+  <arg name="camera_info" default="/F1/camera_info"/>
+  <arg name="path" default="/lvi_sam/lidar/mapping/path"/> -->
+
+  <!--- Use path graph to create tf2 -->
+  <!-- <node pkg="localization" type="asa_path.py" name="asa_path" output="screen">
+    <remap from="image" to="$(arg image)" />
+    <remap from="camera_info" to="$(arg camera_info)" />   
+    <remap from="path" to="$(arg path)" />    
+  </node>   -->
+
+  <arg name="image" default="/k4a/rgb/image_rect"/>
+  <arg name="camera_info" default="/k4a/rgb/camera_info"/>
+
+  <node pkg="localization" type="asa_rtabmap.py" name="asa_rtabmap" output="screen">
+    <remap from="image" to="$(arg image)" />
+    <remap from="camera_info" to="$(arg camera_info)" />   
+  </node>    
+
+  <node pkg="localization" type="build_db.py" name="build_db" >
+    <remap from="image" to= "/asa/image" />
+    <remap from="camera_info" to="/asa/camera_info" />   
+  </node>  
+
+</launch>
