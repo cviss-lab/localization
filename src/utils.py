@@ -1,11 +1,9 @@
-#!/usr/bin/env python  
-import rospy
-import tf
+#!/usr/bin/env python3
 import cv2
 import cv2.aruco as aruco
 import numpy as np
 from geometry_msgs.msg import Transform
-
+from scipy.spatial.transform import Rotation
 
 def pinhole_model(pose,K):
     """Loads projection and extrensics information for a pinhole camera model
@@ -27,7 +25,7 @@ def pinhole_model(pose,K):
 
     # Convert camera rotation from quaternion to matrix
     q = pose[4:]
-    Rot = tf.transformations.quaternion_matrix(q)[:3,:3]
+    Rot = Rotation.from_quat(q)
     
     # Find camera extrinsics (R,t)
     R = Rot.T
