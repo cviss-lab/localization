@@ -12,24 +12,29 @@ import time
 hloc_module=join(dirname(realpath(__file__)),'src/hloc_toolbox')
 sys.path.insert(0,hloc_module)
 
-from src.hloc_toolbox import match_features
+from src.hloc_toolbox import match_features, detect_features
 
 PLOT_FIGS = False
 
 def main():
     
     dataset_dir = join(dirname(realpath(__file__)),'datasets/markers')
-    
+    anchors_dir = join(dirname(realpath(__file__)),'datasets/anchors')
+
     results_dir = join(dirname(realpath(__file__)),'results')
 
     shutil.rmtree(results_dir,ignore_errors=True)
     os.mkdir(results_dir)
     os.mkdir(join(results_dir,'matches'))
+    os.mkdir(join(results_dir,'reproj'))
 
     marker_list = sorted(os.listdir(dataset_dir))
+    anchor_list = sorted(os.listdir(join(anchors_dir,'color')))
+
     # marker_list = ['c']
 
     features_types = ['ORB','SIFT','R2D2','SuperPoint+NN','SuperPoint+superglue']
+
     error_features = pd.DataFrame(index=features_types,columns=['Positional Error','Outliers','Time','Matches'])
 
     for features_type in features_types:
@@ -37,30 +42,58 @@ def main():
         error_markers = []
         eval_time = []
         num_matches = []
+        anchors_data = []
+
+        for anchor in range(len(anchor_list)):
+            I1 = cv2.imread(join(anchors_dir,'color',str(anchor)+'.jpg'))
+            if features_type == 'ORB' or features_type == 'SIFT' or features_type == 'SURF':
+                kp1, des1 = feature_detection(I1,detector=features_type)
+            else:
+                f_kp1 = join(results_dir,'kp'+str(anchor)+'.h5')
+                if os.path.exists(f_kp1):
+                    os.remove(f_kp1)                
+                kp1 = detect_features.main(I1,f_kp1,features_type)    
+                des1 = None
+            anchors_data.append([kp1,des1])
 
         for marker_name in marker_list:
-            input_dir = join(dataset_dir,marker_name)
-
-            I1 = cv2.imread(join(input_dir,'image.jpg'))
-            D1 = cv2.imread(join(input_dir,'depth.png'),cv2.IMREAD_UNCHANGED)
-            K1 = np.loadtxt(join(input_dir,'K1.txt'))
-            K2 = np.loadtxt(join(input_dir,'K2.txt'))
-            
+            input_dir = join(dataset_dir,marker_name) 
             query_files = os.listdir(join(input_dir,'query'))
 
             for query_id,query_file in enumerate(query_files):
                 I2 = cv2.imread(join(input_dir,'query',query_file))
+                K2 = np.loadtxt(join(input_dir,'intrinsics.txt'))
 
                 t1 = time.time()
-                if features_type == 'ORB' or features_type == 'SIFT' or features_type == 'SURF':
-                    kp1, des1 = feature_detection(I1,detector=features_type)
-                    kp2, des2 = feature_detection(I2,detector=features_type)
-                    matches = feature_matching(des1,des2)
-                else:
-                    matches, kp1, kp2 = match_features.main(I1,I2,features_type)
+                found_anchor = False
 
-                num_matches.append(len(matches))
-                if len(matches) > 20:
+                if features_type == 'ORB' or features_type == 'SIFT' or features_type == 'SURF':
+                    kp2, des2 = feature_detection(I2,detector=features_type)
+                else:
+                    f_kp2 = join(results_dir,'kp_q.h5')
+                    if os.path.exists(f_kp2):
+                        os.remove(f_kp2)
+                    kp2 = detect_features.main(I2,f_kp2,features_type)  
+                    des2 = None
+
+                n_inliers = 0
+                for anchor in range(len(anchor_list)):
+
+                    kp1, des1 = anchors_data[anchor]
+                    if features_type == 'ORB' or features_type == 'SIFT' or features_type == 'SURF':
+                        matches = feature_matching(des1,des2)
+                    else:
+                        f_kp1 = join(results_dir,'kp'+str(anchor)+'.h5')
+                        f_kp2 = join(results_dir,'kp_q.h5')
+                        matches = match_features.main(f_kp1,f_kp2,features_type)
+
+
+                    if len(matches) < 20:
+                        continue
+
+                    D1 = cv2.imread(join(anchors_dir,'depth',str(anchor)+'.png'),cv2.IMREAD_UNCHANGED)
+                    K1 = np.loadtxt(join(anchors_dir,'intrinsics.txt'))
+
                     pts1 = np.float32([ kp1[m.queryIdx].pt for m in matches ])
                     pts2 = np.float32([ kp2[m.trainIdx].pt for m in matches ])
 
@@ -68,35 +101,54 @@ def main():
                     pts3D = np.array([x,y,z]).T            
                     
                     idx = np.array([i for i,p in enumerate(pts3D) if not np.any(np.isnan(p))])
+                    if len(idx) < 10:
+                        continue
+
                     pts3D = pts3D[idx]
                     pts2D = pts2[idx]
 
-                    if len(idx) < 10:
-                        error_markers.append(-1)
-                            
                     retval,rvecs,tvecs,inliers=cv2.solvePnPRansac(pts3D, pts2D, K2, None,flags=cv2.SOLVEPNP_P3P)
-                    
-                    # find relocalized pose of query image relative to robot camera
+                    if not retval or len(inliers)/len(pts2D) < 0.5:
+                        continue
 
-                    R = cv2.Rodrigues(rvecs)[0]
-                    t = tvecs
-                    P = np.dot(K2, np.hstack([R, t]))      
+                    found_anchor = True
+                    if n_inliers < len(inliers):
 
-                    t2 = time.time()
-                    eval_time.append(t2-t1)
+                        t2 = time.time()
 
-                    if PLOT_FIGS:
-                        draw_matches(I1,I2,kp1,kp2,matches)    
-                    
-                    marker_length = 0.12
-                    error = reproj_error(P,I1,D1,K1,I2,K2,marker_length,features_type,query_id,marker_name)   
-                    error_markers.append(error)
-                else:
+                        # find relocalized pose of query image relative to robot camera
+
+                        R = cv2.Rodrigues(rvecs)[0]
+                        t = tvecs
+                        P = np.dot(K2, np.hstack([R, t]))      
+
+                        I1 = cv2.imread(join(anchors_dir,'color',str(anchor)+'.jpg'))
+
+                        marker_length = 0.12
+
+                        fname1 = '_'.join([features_type,marker_name,str(query_id)])+'_reproj.png'
+                        fname1 = join(results_dir,'reproj',fname1)
+
+                        fname2 = '_'.join([features_type,marker_name,str(query_id)])+'_matches.png'
+                        fname2 = join(results_dir,'matches',fname2)
+                        
+                        error = reproj_error(P,I1,D1,K1,I2,K2,marker_length,features_type,query_id,marker_name,fname1)   
+
+                        if n_inliers == 0:
+                            error_markers.append(error)                    
+                            eval_time.append(t2-t1)
+                            num_matches.append(len(inliers))
+                        else:
+                            error_markers[-1] = error                  
+                            eval_time[-1] = t2-t1
+                            num_matches[-1] = len(inliers)
+
+                        n_inliers = len(inliers)
+                        
+                        draw_matches(I1,I2,kp1,kp2,matches,fname2)
+
+                if not found_anchor:
                     error_markers.append(-1)
-
-                fname = '_'.join([features_type,marker_name,str(query_id)])+'_matches.png'
-                fname = join(results_dir,'matches',fname)
-                draw_matches(I1,I2,kp1,kp2,matches,plot=False,fname=fname)
 
         error_markers = np.array(error_markers)
         error_features.loc[features_type]['Positional Error'] = 100*np.mean(error_markers[error_markers!=-1])
@@ -104,11 +156,9 @@ def main():
         error_features.loc[features_type]['Time'] = np.mean(eval_time)
         error_features.loc[features_type]['Matches'] = np.mean(num_matches)
 
-    f_results = open(join(results_dir,'results.txt'), 'w')
-    f_results.write(error_features.to_string())
-    f_results.close()
+    error_features.to_csv(join(results_dir,'results.csv'))
 
-def reproj_error(P2,I1,D1,K1,I2,K2,marker_length,features_type,query_id,marker_name):
+def reproj_error(P2,I1,D1,K1,I2,K2,marker_length,features_type,query_id,marker_name, fname):
 
     m1 = detect_markers(I1,xy_array=True)
     m2 = detect_markers(I2,xy_array=True)
@@ -146,28 +196,32 @@ def reproj_error(P2,I1,D1,K1,I2,K2,marker_length,features_type,query_id,marker_n
 
     print("%s, %s, %i Positional Error: %s cm" % (features_type,marker_name, query_id, reproj_error_scaled*100))
 
-    if PLOT_FIGS:
-        x1,y1 = np.int32(m2_proj[:,0])
-        x2,y2 = np.int32(m2_proj[:,1])
-        x3,y3 = np.int32(m2_proj[:,2])
-        x4,y4 = np.int32(m2_proj[:,3])
+    x1,y1 = np.int32(m2_proj[:,0])
+    x2,y2 = np.int32(m2_proj[:,1])
+    x3,y3 = np.int32(m2_proj[:,2])
+    x4,y4 = np.int32(m2_proj[:,3])
 
-        cv2.line(I2, (x1, y1), (x2, y2), (0, 255, 0), thickness=3)
-        cv2.line(I2, (x2, y2), (x3, y3), (0, 255, 0), thickness=3)
-        cv2.line(I2, (x3, y3), (x4, y4), (0, 255, 0), thickness=3)
-        cv2.line(I2, (x4, y4), (x1, y1), (0, 255, 0), thickness=3)
-        
+    import copy
+    img = copy.copy(I2)
+    cv2.line(img, (x1, y1), (x2, y2), (0, 255, 0), thickness=3)
+    cv2.line(img, (x2, y2), (x3, y3), (0, 255, 0), thickness=3)
+    cv2.line(img, (x3, y3), (x4, y4), (0, 255, 0), thickness=3)
+    cv2.line(img, (x4, y4), (x1, y1), (0, 255, 0), thickness=3)
+    
+    cv2.imwrite(fname,img)
+
+    if PLOT_FIGS:
         plt.imshow(cv2.cvtColor(I2,cv2.COLOR_RGB2BGR)),plt.show()        
     
     return reproj_error_scaled
 
-def draw_matches(I1,I2,kp1,kp2,matches,plot=True,fname='matches.png'):
+def draw_matches(I1,I2,kp1,kp2,matches,fname):
     
     img = cv2.drawMatches(I1,kp1,I2,kp2,matches,None,flags=2)
-    if plot:
+    if PLOT_FIGS:
         plt.imshow(cv2.cvtColor(img,cv2.COLOR_RGB2BGR)),plt.show()
-    else:
-        cv2.imwrite(fname,img)
+    
+    cv2.imwrite(fname,img)
 
 def feature_detection(I,detector='SIFT'):
     
@@ -198,28 +252,9 @@ def feature_matching(des1,des2):
         if m.distance < 0.75*n.distance:
             good.append(m)
     matches = good
-    
-    # bf = cv2.BFMatcher(cv2.NORM_L2, crossCheck=True)
-    # matches = bf.match(des1, des2)
-    # matches = sorted(matches, key=lambda x: x.distance)
-    # top_N = len(des1)
-    # matches = matches[:top_N]
-    
-    # # Draw first 10 matches.
-    # img3 = cv.drawMatches(img1,kp1,img2,kp2,matches[:10],None,flags=cv.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
-    # img3 = cv2.drawMatchesKnn(I1,kp1,I2,kp2,good,None,flags=2)
-    # plt.imshow(img3),plt.show()   
+
     return matches     
 
-def test(self):
-    self.detector_running = True
-    self.depth = cv2.imread('D1.png',cv2.IMREAD_UNCHANGED)
-    self.image = cv2.imread('I1.jpg')
-    self.K = np.loadtxt('K1.txt')
-    K2 = np.loadtxt('K2.txt')
-    I2 = cv2.imread('I2.jpg')
-    self.callback_query(I2,K2)
-        
 
 if __name__ == '__main__':
     main()    
