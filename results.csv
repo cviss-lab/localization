@@ -1,7 +1,0 @@
-	,Positional Error,	Outliers,	Time,	Matches
-ORB,			0.415693,	7,	0.444314,	35.3043
-SIFT,			0.320684,	0,	1.70225	,	81.8
-R2D2,			0.353212,	2,	1.17451	,	78.6071
-SuperPoint+NN,		0.324123,	3,	0.656494,	239.037
-SuperPoint+superglue,	0.350531,	0,	2.23739	,	370.567
-

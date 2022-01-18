@@ -35,11 +35,17 @@ def main():
 
     features_types = ['ORB','SIFT','R2D2','SuperPoint+NN','SuperPoint+superglue']
 
-    error_features = pd.DataFrame(index=features_types,columns=['Positional Error','Outliers','Time','Matches'])
+    error_features = pd.DataFrame(index=features_types,columns=['Reprojection Error','Positional Error (H)',
+                                                                'Positional Error (in-plane)','Positional Error (out-of-plane)',
+                                                                'Outliers','Time','Matches'])
 
     for features_type in features_types:
 
-        error_markers = []
+        error0_markers = []
+        error1_markers = []
+        error2_markers = []
+        error3_markers = []
+
         eval_time = []
         num_matches = []
         anchors_data = []
@@ -120,7 +126,8 @@ def main():
 
                         R = cv2.Rodrigues(rvecs)[0]
                         t = tvecs
-                        P = np.dot(K2, np.hstack([R, t]))      
+                        T = np.hstack([R, t])
+                        P = np.dot(K2, T)      
 
                         I1 = cv2.imread(join(anchors_dir,'color',str(anchor)+'.jpg'))
 
@@ -132,14 +139,20 @@ def main():
                         fname2 = '_'.join([features_type,marker_name,str(query_id)])+'_matches.png'
                         fname2 = join(results_dir,'matches',fname2)
                         
-                        error = reproj_error(P,I1,D1,K1,I2,K2,marker_length,features_type,query_id,marker_name,fname1)   
+                        error0, error1, error2, error3  = reproj_error(P,T,I1,D1,K1,I2,K2,marker_length,features_type,query_id,marker_name,fname1)   
 
                         if n_inliers == 0:
-                            error_markers.append(error)                    
+                            error0_markers.append(error0)  
+                            error1_markers.append(error1)  
+                            error2_markers.append(error2)                    
+                            error3_markers.append(error3)                    
                             eval_time.append(t2-t1)
                             num_matches.append(len(inliers))
                         else:
-                            error_markers[-1] = error                  
+                            error0_markers[-1] = error0  
+                            error1_markers[-1] = error1  
+                            error2_markers[-1] = error2                    
+                            error3_markers[-1] = error3   
                             eval_time[-1] = t2-t1
                             num_matches[-1] = len(inliers)
 
@@ -148,17 +161,28 @@ def main():
                         draw_matches(I1,I2,kp1,kp2,matches,fname2)
 
                 if not found_anchor:
-                    error_markers.append(-1)
+                    error0_markers.append(-1)
+                    error1_markers.append(-1)
+                    error2_markers.append(-1)
+                    error3_markers.append(-1)
 
-        error_markers = np.array(error_markers)
-        error_features.loc[features_type]['Positional Error'] = 100*np.mean(error_markers[error_markers!=-1])
-        error_features.loc[features_type]['Outliers'] = np.sum(error_markers==-1)
+        error0_markers = np.array(error0_markers)
+        error1_markers = np.array(error1_markers)
+        error2_markers = np.array(error2_markers)
+        error3_markers = np.array(error3_markers)
+
+        error_features.loc[features_type]['Reprojection Error'] = np.mean(error0_markers[error0_markers!=-1])
+        error_features.loc[features_type]['Positional Error (H)'] = 100*np.mean(error1_markers[error1_markers!=-1])
+        error_features.loc[features_type]['Positional Error (in-plane)'] = 100*np.mean(error2_markers[error2_markers!=-1])
+        error_features.loc[features_type]['Positional Error (out-of-plane)'] = 100*np.mean(error3_markers[error3_markers!=-1])
+
+        error_features.loc[features_type]['Outliers'] = np.sum(error1_markers==-1)
         error_features.loc[features_type]['Time'] = np.mean(eval_time)
         error_features.loc[features_type]['Matches'] = np.mean(num_matches)
 
     error_features.to_csv(join(results_dir,'results.csv'))
 
-def reproj_error(P2,I1,D1,K1,I2,K2,marker_length,features_type,query_id,marker_name, fname):
+def reproj_error(P2,T,I1,D1,K1,I2,K2,marker_length,features_type,query_id,marker_name, fname):
 
     m1 = detect_markers(I1,xy_array=True)
     m2 = detect_markers(I2,xy_array=True)
@@ -175,16 +199,33 @@ def reproj_error(P2,I1,D1,K1,I2,K2,marker_length,features_type,query_id,marker_n
     m_3D = np.array([x,y,z]).T
 
     m2_proj = ProjectToImage(P2,m_3D.T)
-    reproj_error = np.sqrt(np.sum((m2-m2_proj)[0,:]**2 + (m2-m2_proj)[1,:]**2))
+    reproj_error = np.sum(np.sqrt((m2-m2_proj)[0,:]**2 + (m2-m2_proj)[1,:]**2))
     # print("Reprojection Error: %s" % reproj_error)
 
-    m2_scaled = np.array([[0,0],[marker_length,0],[marker_length,marker_length],[0,marker_length]])
+    m2_scaled = np.array([[-marker_length/2,-marker_length/2],[ marker_length/2,-marker_length/2],
+                          [ marker_length/2, marker_length/2],[-marker_length/2, marker_length/2]])
     H = cv2.findHomography(m2.T,m2_scaled)[0] 
 
     m2_proj_scaled = cv2.perspectiveTransform(m2_proj.T.reshape(-1,1,2),H).reshape(-1,2)
 
     diff = (m2_proj_scaled - m2_scaled).T
     reproj_error_scaled = np.mean(np.sqrt(diff[0,:]**2 + diff[1,:]**2))
+
+    rvecs2,tvecs2,objpoints_m_check = cv2.aruco.estimatePoseSingleMarkers([m2.T], marker_length, K2, (0,0,0,0))
+
+    objpoints_c1 = m_3D
+    T_c2_c1 = np.vstack([T,[0,0,0,1]])
+    objpoints_m_check = objpoints_m_check.reshape(4,3)
+    R_c2_m = cv2.Rodrigues(rvecs2)[0]
+    t_c2_m = tvecs2.reshape(3,1)
+    T_m_c2 = np.vstack([np.hstack([R_c2_m.T, -R_c2_m.T.dot(t_c2_m)]),[0,0,0,1]])
+    _objpoints_c1 = np.vstack([objpoints_c1.T, np.ones((1,4))])
+    _objpoints_c2 = np.dot(T_c2_c1, _objpoints_c1)
+    _objpoints_m = np.dot(T_m_c2, _objpoints_c2)
+    objpoints_m=(_objpoints_m[:3,:]/_objpoints_m[3,:]).T
+    diff=objpoints_m.mean(axis=0)
+    error2=np.linalg.norm(diff[:2])
+    error3=np.linalg.norm(diff[2])
 
     if id1 != id2:
         for _ in range(4):
@@ -194,7 +235,7 @@ def reproj_error(P2,I1,D1,K1,I2,K2,marker_length,features_type,query_id,marker_n
             if reproj_error_scaled2 < reproj_error_scaled:
                 reproj_error_scaled = reproj_error_scaled2
 
-    print("%s, %s, %i Positional Error: %s cm" % (features_type,marker_name, query_id, reproj_error_scaled*100))
+    print("%s, %s, %i Positional Error (H): %s cm" % (features_type,marker_name, query_id, reproj_error_scaled*100))
 
     x1,y1 = np.int32(m2_proj[:,0])
     x2,y2 = np.int32(m2_proj[:,1])
@@ -213,7 +254,7 @@ def reproj_error(P2,I1,D1,K1,I2,K2,marker_length,features_type,query_id,marker_n
     if PLOT_FIGS:
         plt.imshow(cv2.cvtColor(I2,cv2.COLOR_RGB2BGR)),plt.show()        
     
-    return reproj_error_scaled
+    return reproj_error, reproj_error_scaled, error2, error3
 
 def draw_matches(I1,I2,kp1,kp2,matches,fname):
     
