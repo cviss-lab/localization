@@ -34,9 +34,12 @@ def main():
     # marker_list = ['c']
 
     features_types = ['ORB','SIFT','R2D2','SuperPoint+NN','SuperPoint+superglue']
+    # features_types = ['ORB']
 
     error_features = pd.DataFrame(index=features_types,columns=['Reprojection Error','Positional Error (H)',
                                                                 'Positional Error (in-plane)','Positional Error (out-of-plane)',
+                                                                'Reprojection Error [std]','Positional Error (H) [std]',
+                                                                'Positional Error (in-plane) [std]','Positional Error (out-of-plane) [std]',                                                                
                                                                 'Outliers','Time','Matches'])
 
     for features_type in features_types:
@@ -176,6 +179,12 @@ def main():
         error_features.loc[features_type]['Positional Error (in-plane)'] = 100*np.mean(error2_markers[error2_markers!=-1])
         error_features.loc[features_type]['Positional Error (out-of-plane)'] = 100*np.mean(error3_markers[error3_markers!=-1])
 
+        error_features.loc[features_type]['Reprojection Error [std]'] = np.std(error0_markers[error0_markers!=-1])
+        error_features.loc[features_type]['Positional Error (H) [std]'] = 100*np.std(error1_markers[error1_markers!=-1])
+        error_features.loc[features_type]['Positional Error (in-plane) [std]'] = 100*np.std(error2_markers[error2_markers!=-1])
+        error_features.loc[features_type]['Positional Error (out-of-plane) [std]'] = 100*np.std(error3_markers[error3_markers!=-1])
+
+
         error_features.loc[features_type]['Outliers'] = np.sum(error1_markers==-1)
         error_features.loc[features_type]['Time'] = np.mean(eval_time)
         error_features.loc[features_type]['Matches'] = np.mean(num_matches)
@@ -230,10 +239,14 @@ def reproj_error(P2,T,I1,D1,K1,I2,K2,marker_length,features_type,query_id,marker
     if id1 != id2:
         for _ in range(4):
             m2_proj_scaled = np.array([m2_proj_scaled[i,:] for i in [1,2,3,0]])
+            m2_proj = np.array([m2_proj[:,i] for i in [1,2,3,0]]).T
             diff = (m2_proj_scaled - m2_scaled).T
             reproj_error_scaled2 = np.mean(np.sqrt(diff[0,:]**2 + diff[1,:]**2))
+            reproj_error2 = np.sum(np.sqrt((m2-m2_proj)[0,:]**2 + (m2-m2_proj)[1,:]**2))
             if reproj_error_scaled2 < reproj_error_scaled:
                 reproj_error_scaled = reproj_error_scaled2
+                reproj_error = reproj_error2
+
 
     print("%s, %s, %i Positional Error (H): %s cm" % (features_type,marker_name, query_id, reproj_error_scaled*100))
 
