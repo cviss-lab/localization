@@ -2,7 +2,7 @@
 import cv2
 import cv2.aruco as aruco
 import numpy as np
-from geometry_msgs.msg import Transform
+from geometry_msgs.msg import Transform, TransformStamped
 from scipy.spatial.transform import Rotation
 
 def pinhole_model(pose,K):
@@ -98,6 +98,24 @@ def create_transform(p,q):
     T.rotation.y = q[1]
     T.rotation.z = q[2]
     T.rotation.w = q[3]
+    
+    return T
+
+def create_transform_stamped(p,q,t,child_frame_id,frame_id):
+    
+    T = TransformStamped()
+    T.header.stamp = t
+    T.header.frame_id = frame_id
+    T.child_frame_id = child_frame_id
+
+    T.transform.translation.x = p[0]
+    T.transform.translation.y = p[1]
+    T.transform.translation.z = p[2]
+
+    T.transform.rotation.x = q[0]
+    T.transform.rotation.y = q[1]
+    T.transform.rotation.z = q[2]
+    T.transform.rotation.w = q[3]
     
     return T
 

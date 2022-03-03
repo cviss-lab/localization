@@ -33,16 +33,26 @@ def main():
 
     # marker_list = ['c']
 
-    features_types = ['ORB','SIFT','R2D2','SuperPoint+NN','SuperPoint+superglue']
-    # features_types = ['ORB']
+    features_config = ['ORB','SIFT','R2D2','SuperPoint+NN','SuperPoint+superglue']
+    # features_config = ['ORB']
 
-    error_features = pd.DataFrame(index=features_types,columns=['Reprojection Error','Positional Error (H)',
+    error_features = pd.DataFrame(index=features_config,columns=['Reprojection Error','Positional Error (H)',
                                                                 'Positional Error (in-plane)','Positional Error (out-of-plane)',
                                                                 'Reprojection Error [std]','Positional Error (H) [std]',
                                                                 'Positional Error (in-plane) [std]','Positional Error (out-of-plane) [std]',                                                                
                                                                 'Outliers','Time','Matches'])
 
-    for features_type in features_types:
+    for features_type in features_config:
+
+        if 'SuperPoint' in features_type:
+            detector = 'SuperPoint'
+        else:
+            detector = features_type
+
+        if 'superglue' in features_type:
+            matcher = 'SuperGlue'
+        else:
+            matcher = 'NN'            
 
         error0_markers = []
         error1_markers = []
@@ -55,14 +65,8 @@ def main():
 
         for anchor in range(len(anchor_list)):
             I1 = cv2.imread(join(anchors_dir,'color',str(anchor)+'.jpg'))
-            if features_type == 'ORB' or features_type == 'SIFT' or features_type == 'SURF':
-                kp1, des1 = feature_detection(I1,detector=features_type)
-            else:
-                f_kp1 = join(results_dir,'kp'+str(anchor)+'.h5')
-                if os.path.exists(f_kp1):
-                    os.remove(f_kp1)                
-                kp1 = detect_features.main(I1,f_kp1,features_type)    
-                des1 = None
+            f_kp1 = join(results_dir,'kp'+str(anchor)+'.h5')
+            kp1, des1 = feature_detection(I1,detector,fname=f_kp1)
             anchors_data.append([kp1,des1])
 
         for marker_name in marker_list:
@@ -76,25 +80,17 @@ def main():
                 t1 = time.time()
                 found_anchor = False
 
-                if features_type == 'ORB' or features_type == 'SIFT' or features_type == 'SURF':
-                    kp2, des2 = feature_detection(I2,detector=features_type)
-                else:
-                    f_kp2 = join(results_dir,'kp_q.h5')
-                    if os.path.exists(f_kp2):
-                        os.remove(f_kp2)
-                    kp2 = detect_features.main(I2,f_kp2,features_type)  
-                    des2 = None
+                f_kp2 = join(results_dir,'kp_q.h5')
+                kp2, des2 = feature_detection(I2,detector,fname=f_kp2)
 
                 n_inliers = 0
                 for anchor in range(len(anchor_list)):
 
                     kp1, des1 = anchors_data[anchor]
-                    if features_type == 'ORB' or features_type == 'SIFT' or features_type == 'SURF':
-                        matches = feature_matching(des1,des2)
-                    else:
-                        f_kp1 = join(results_dir,'kp'+str(anchor)+'.h5')
-                        f_kp2 = join(results_dir,'kp_q.h5')
-                        matches = match_features.main(f_kp1,f_kp2,features_type)
+
+                    f_kp1 = join(results_dir,'kp'+str(anchor)+'.h5')
+                    f_kp2 = join(results_dir,'kp_q.h5')
+                    matches = feature_matching(des1,des2,detector,matcher,fname1=f_kp1,fname2=f_kp2)
 
 
                     if len(matches) < 20:
@@ -277,7 +273,7 @@ def draw_matches(I1,I2,kp1,kp2,matches,fname):
     
     cv2.imwrite(fname,img)
 
-def feature_detection(I,detector='SIFT'):
+def feature_detection(I,detector,fname=None):
     
     if detector == 'SIFT':
         gray= cv2.cvtColor(I,cv2.COLOR_BGR2GRAY)
@@ -289,25 +285,29 @@ def feature_detection(I,detector='SIFT'):
     elif detector == 'SURF':
         surf = cv2.xfeatures2d.SURF_create()
         kp, des = surf.detectAndCompute(I,None)
+    else:
+        if os.path.exists(fname):
+            os.remove(fname)
+        kp = detect_features.main(I,fname,detector)  
+        des = None        
 
     return kp, des
 
-def feature_matching(des1,des2):
-    # match the descriptors
-    # create BFMatcher object
+def feature_matching(des1,des2,detector,matcher,fname1=None,fname2=None):
 
-    # BFMatcher with default params
-    bf = cv2.BFMatcher(cv2.NORM_L2, crossCheck=False)
-    matches = bf.knnMatch(des1,des2, k=2)
+    if detector == 'ORB' or detector == 'SIFT' or detector == 'SURF':
+        bf = cv2.BFMatcher(cv2.NORM_L2, crossCheck=False)
+        matches = bf.knnMatch(des1,des2, k=2)
+        good = []
+        for m,n in matches:
+            if m.distance < 0.75*n.distance:
+                good.append(m)
+        matches = good
+        return matches     
+    else:
+        matches = match_features.main(fname1,fname2,detector,matcher)
 
-    # # Apply ratio test
-    good = []
-    for m,n in matches:
-        if m.distance < 0.75*n.distance:
-            good.append(m)
-    matches = good
-
-    return matches     
+    return matches 
 
 
 if __name__ == '__main__':

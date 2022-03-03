@@ -1,0 +1,21 @@
+<launch>
+  <node pkg="image_transport" type="republish" name="uncompress" args="compressed in:=/HL2/camera/image out:=/HL2/camera/image_rect" />
+
+  <node pkg="localization" type="self_localization.py" name="self_localization" output="screen">
+
+    <!-- <remap from="trigger" to="/HL2/camera/reloc_trigger" /> -->
+
+    <remap from="image" to="/camera/color/image_rect" />
+    <remap from="camera_info" to="/camera/color/camera_info" />
+    <remap from="depth" to="/livox/depth" />
+
+    <remap from="image_query" to="/HL2/camera/image_rect" />
+    <remap from="camera_info_query" to="/HL2/camera/camera_info" />
+    <remap from="reloc_pose" to="/HL2/camera/reloc_pose" />
+
+    <param name="debug" value="false" />
+    <param name="map_frame" value="camera_init" />
+
+  </node>  
+
+</launch>
