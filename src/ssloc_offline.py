@@ -25,81 +25,81 @@ from hloc_toolbox import match_features, detect_features, search
 
 class Node:
 
-    def __init__(self, ros=True, debug=False, data_folder=None, create_new_anchors=False):
+    def __init__(self, debug=False, data_folder=None, create_new_anchors=False):
         # self.test()
-        self.ros = ros
+        # self.ros = ros
         self.debug = debug
 
-        if self.ros:
-            rospy.init_node('self_localization')
-            self.map_frame_id = rospy.get_param('~map_frame_id', default='map')
-            self.robot_camera_frame_id = rospy.get_param('~camera_frame_id', default=None)
-            self.send_unity_pose = rospy.get_param('~send_unity_pose', default=False)
-            self.frame_rate = rospy.get_param('~frame_rate', default=0.5)
-            self.detector = rospy.get_param('~detector', default='SuperPoint')
-            self.matcher = rospy.get_param('~matcher', default='SuperGlue')
-            self.sliding_average_buffer = rospy.get_param('~sliding_average_buffer', default=1)
-            self.results_dir = rospy.get_param('~save_directory', default='results')
-            self.create_new_anchors = rospy.get_param('~create_new_anchors', default=False)
-            self.num_query_devices = rospy.get_param('/num_users', default=1)
-
-            self.ls = tf.TransformListener()
-            self.br = tf2_ros.StaticTransformBroadcaster()
-
-            # set up robot image & depth subscriber
-            sub1 = message_filters.Subscriber('image', Image)
-            sub3 = message_filters.Subscriber('depth', Image)
-            rospy.Subscriber('camera_info', CameraInfo, self.camera_info_callback)
-
-            # set up trigger
-            # sub4 = rospy.Subscriber('trigger',String,self.callback_trigger)
-            # set up query image subscriber
-
-            print('subscribed to {} query devices!'.format(self.num_query_devices))
-
-            for i in range(self.num_query_devices):
-                image_query = "/Player{}/camera/image/compressed".format(str(i))
-                camera_info_query = "/Player{}/camera/camera_info".format(str(i))
-                pose_query = "/Player{}/camera/pose".format(str(i))
-
-                sub5 = message_filters.Subscriber(image_query, CompressedImage)
-                sub6 = message_filters.Subscriber(camera_info_query, CameraInfo)
-                sub7 = message_filters.Subscriber(pose_query, PoseStamped)
-
-                if self.create_new_anchors:
-                    ts = message_filters.ApproximateTimeSynchronizer([sub1, sub3], 1, 0.5)
-                    ts.registerCallback(self.create_anchor)
-
-                if self.send_unity_pose:
-                    ts = message_filters.ApproximateTimeSynchronizer([sub5, sub6, sub7], 1, 0.5)
-                    ts.registerCallback(self.callback_query)
-                else:
-                    ts = message_filters.ApproximateTimeSynchronizer([sub5, sub6], 1, 0.5)
-                    ts.registerCallback(self.callback_query)
-
-                transform = utils.create_transform_stamped((0, 0, 0),
-                                                           (0, 0, 0, 1),
-                                                           rospy.Time.now(),
-                                                           'Player{}_unity'.format(str(i)),
-                                                           self.map_frame_id)
-
-                self.br.sendTransform(transform)
-
-            self.pub = rospy.Publisher('reloc_map_pose', PoseStamped, queue_size=1)
-            self.pub2 = rospy.Publisher('retrieved_image', Image, queue_size=1)
-            self.pub3 = rospy.Publisher('matches_image', Image, queue_size=1)
-
-
-        else:
-            self.map_frame_id = None
-            self.robot_camera_frame_id = None
-            self.send_unity_pose = False
-            self.frame_rate = 1
-            self.detector = 'SuperPoint'
-            self.matcher = 'SuperGlue'
-            self.sliding_average_buffer = 1
-            self.results_dir = join(data_folder, 'results')
-            self.create_new_anchors = create_new_anchors
+        # if self.ros:
+        #     rospy.init_node('self_localization')
+        #     self.map_frame_id = rospy.get_param('~map_frame_id', default='map')
+        #     self.robot_camera_frame_id = rospy.get_param('~camera_frame_id', default=None)
+        #     self.send_unity_pose = rospy.get_param('~send_unity_pose', default=False)
+        #     self.frame_rate = rospy.get_param('~frame_rate', default=0.5)
+        #     self.detector = rospy.get_param('~detector', default='SuperPoint')
+        #     self.matcher = rospy.get_param('~matcher', default='SuperGlue')
+        #     self.sliding_average_buffer = rospy.get_param('~sliding_average_buffer', default=1)
+        #     self.results_dir = rospy.get_param('~save_directory', default='results')
+        #     self.create_new_anchors = rospy.get_param('~create_new_anchors', default=False)
+        #     self.num_query_devices = rospy.get_param('/num_users', default=1)
+        #
+        #     self.ls = tf.TransformListener()
+        #     self.br = tf2_ros.StaticTransformBroadcaster()
+        #
+        #     # set up robot image & depth subscriber
+        #     sub1 = message_filters.Subscriber('image', Image)
+        #     sub3 = message_filters.Subscriber('depth', Image)
+        #     rospy.Subscriber('camera_info', CameraInfo, self.camera_info_callback)
+        #
+        #     # set up trigger
+        #     # sub4 = rospy.Subscriber('trigger',String,self.callback_trigger)
+        #     # set up query image subscriber
+        #
+        #     print('subscribed to {} query devices!'.format(self.num_query_devices))
+        #
+        #     for i in range(self.num_query_devices):
+        #         image_query = "/Player{}/camera/image/compressed".format(str(i))
+        #         camera_info_query = "/Player{}/camera/camera_info".format(str(i))
+        #         pose_query = "/Player{}/camera/pose".format(str(i))
+        #
+        #         sub5 = message_filters.Subscriber(image_query, CompressedImage)
+        #         sub6 = message_filters.Subscriber(camera_info_query, CameraInfo)
+        #         sub7 = message_filters.Subscriber(pose_query, PoseStamped)
+        #
+        #         if self.create_new_anchors:
+        #             ts = message_filters.ApproximateTimeSynchronizer([sub1, sub3], 1, 0.5)
+        #             ts.registerCallback(self.create_anchor)
+        #
+        #         if self.send_unity_pose:
+        #             ts = message_filters.ApproximateTimeSynchronizer([sub5, sub6, sub7], 1, 0.5)
+        #             ts.registerCallback(self.callback_query)
+        #         else:
+        #             ts = message_filters.ApproximateTimeSynchronizer([sub5, sub6], 1, 0.5)
+        #             ts.registerCallback(self.callback_query)
+        #
+        #         transform = utils.create_transform_stamped((0, 0, 0),
+        #                                                    (0, 0, 0, 1),
+        #                                                    rospy.Time.now(),
+        #                                                    'Player{}_unity'.format(str(i)),
+        #                                                    self.map_frame_id)
+        #
+        #         self.br.sendTransform(transform)
+        #
+        #     self.pub = rospy.Publisher('reloc_map_pose', PoseStamped, queue_size=1)
+        #     self.pub2 = rospy.Publisher('retrieved_image', Image, queue_size=1)
+        #     self.pub3 = rospy.Publisher('matches_image', Image, queue_size=1)
+        #
+        #
+        # else:
+        self.map_frame_id = None
+        self.robot_camera_frame_id = None
+        self.send_unity_pose = False
+        self.frame_rate = 1
+        self.detector = 'SuperPoint'
+        self.matcher = 'SuperGlue'
+        self.sliding_average_buffer = 1
+        self.results_dir = join(data_folder, 'results')
+        self.create_new_anchors = create_new_anchors
 
         self.K1 = None
         self.currently_running = False
@@ -125,8 +125,7 @@ class Node:
         self.timeout = 3.0
         self.counter = 0
 
-        if ros:
-            rospy.spin()
+
 
     def camera_info_callback(self, msg):
         self.K1 = np.array(msg.K, dtype=np.float32).reshape(3, 3)
