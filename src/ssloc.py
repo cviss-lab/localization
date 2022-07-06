@@ -40,6 +40,7 @@ class Node:
             self.sliding_average_buffer = rospy.get_param('~sliding_average_buffer',default=1)       
             self.results_dir = rospy.get_param('~save_directory',default='results')
             self.create_new_anchors = rospy.get_param('~create_new_anchors',default=False)        
+            self.num_query_devices = rospy.get_param('/num_users',default=1)        
 
             self.ls = tf.TransformListener()
             self.br = tf2_ros.StaticTransformBroadcaster()
@@ -52,31 +53,42 @@ class Node:
             # set up trigger
             # sub4 = rospy.Subscriber('trigger',String,self.callback_trigger)
             # set up query image subscriber
-            sub5 = message_filters.Subscriber('image_query', Image)
-            sub6 = message_filters.Subscriber('camera_info_query', CameraInfo)     
-            sub7 = message_filters.Subscriber('pose_query', PoseStamped)     
 
-            if self.create_new_anchors:
-                ts = message_filters.ApproximateTimeSynchronizer([sub1,sub3], 1, 0.5) 
-                ts.registerCallback(self.create_anchor)
-    
-            if self.send_unity_pose:
-                ts = message_filters.ApproximateTimeSynchronizer([sub5,sub6,sub7], 1, 0.5) 
-                ts.registerCallback(self.callback_query)
-            else:
-                ts = message_filters.ApproximateTimeSynchronizer([sub5,sub6], 1, 0.5) 
-                ts.registerCallback(self.callback_query)
+            print('subscribed to {} query devices!'.format(self.num_query_devices))
+
+            for i in range(self.num_query_devices):
+                image_query = "/Player{}/camera/image/compressed".format(str(i))
+                camera_info_query = "/Player{}/camera/camera_info".format(str(i))
+                pose_query = "/Player{}/camera/pose".format(str(i))
+
+                sub5 = message_filters.Subscriber(image_query, CompressedImage)
+                sub6 = message_filters.Subscriber(camera_info_query, CameraInfo)     
+                sub7 = message_filters.Subscriber(pose_query, PoseStamped)     
+
+                if self.create_new_anchors:
+                    ts = message_filters.ApproximateTimeSynchronizer([sub1,sub3], 1, 0.5) 
+                    ts.registerCallback(self.create_anchor)
+        
+                if self.send_unity_pose:
+                    ts = message_filters.ApproximateTimeSynchronizer([sub5,sub6,sub7], 1, 0.5) 
+                    ts.registerCallback(self.callback_query)
+                else:
+                    ts = message_filters.ApproximateTimeSynchronizer([sub5,sub6], 1, 0.5) 
+                    ts.registerCallback(self.callback_query)
+
+                transform = utils.create_transform_stamped((0,0,0),
+                                                    (0,0,0,1),
+                                                    rospy.Time.now(),
+                                                    'Player{}_unity'.format(str(i)),
+                                                    self.map_frame_id)                    
+
+                self.br.sendTransform(transform)
+
 
             self.pub = rospy.Publisher('reloc_map_pose', PoseStamped, queue_size=1)
             self.pub2 = rospy.Publisher('retrieved_image', Image, queue_size=1)
             self.pub3 = rospy.Publisher('matches_image', Image, queue_size=1)
 
-            transform = utils.create_transform_stamped((0,0,0),
-                                                (0,0,0,1),
-                                                rospy.Time.now(),
-                                                'unity',
-                                                self.map_frame_id)
-            self.br.sendTransform(transform)
 
         else:
             self.map_frame_id = None
@@ -201,14 +213,15 @@ class Node:
     def callback_query(self,*args):
         print('query image recieved!')
         if self.ros:
-            self.query_camera_frame_id = args[0].header.frame_id      
-            self.timestamp_query = args[0].header.stamp            
+            query_frame_id = args[0].header.frame_id      
+            timestamp_query = args[0].header.stamp            
             if self.send_unity_pose:
                 # unity_pose = self.ls.lookupTransform(self.query_camera_frame_id, 'unity', rospy.Time(0))
                 unity_pose = utils.unpack_pose(args[2].pose)
 
             cv_bridge = CvBridge()
-            I2 = cv_bridge.imgmsg_to_cv2(args[0], desired_encoding='passthrough')         
+            # I2 = cv_bridge.imgmsg_to_cv2(args[0], desired_encoding='passthrough')         
+            I2 = cv_bridge.compressed_imgmsg_to_cv2(args[0])         
             K2 = np.array(args[1].K,dtype=np.float32).reshape(3,3) 
         else:
             I2 = args[0]
@@ -306,9 +319,9 @@ class Node:
         C = -R_.T.dot(tvecs)  
 
         # send localized pose relative to robot map
-        T_m1_c2=self.send_reloc_pose(C,R)
+        T_m1_c2=self.send_reloc_pose(C,R,query_frame_id,timestamp_query)
         if self.send_unity_pose:
-            self.send_unity2map_pose(unity_pose,T_m1_c2)            
+            self.send_unity2map_pose(unity_pose,T_m1_c2,query_frame_id,timestamp_query)            
 
         print('\nquery camera localized!\n')  
 
@@ -324,14 +337,14 @@ class Node:
             T_c2_m1 = utils.Tmatrix_inverse(T_m1_c2)           
             self.check_error(I1,I2,D1,pose1,K1,K2,kp1,kp2,matches1,'interactive',T_c2_m1,inliers)
 
-    def send_reloc_pose(self,C,R):
+    def send_reloc_pose(self,C,R,query_frame_id,timestamp_query):
         R2 = np.eye(4)
         R2[:3,:3] = R
         q = tf.transformations.quaternion_from_matrix(R2)     
         transform = utils.create_transform_stamped((C[0],C[1],C[2]),
                                             (q[0],q[1],q[2],q[3]),
-                                            self.timestamp_query,
-                                            'reloc_pose',
+                                            timestamp_query,
+                                            query_frame_id,
                                             self.map_frame_id)
         if self.ros:
             self.br.sendTransform(transform)
@@ -344,7 +357,7 @@ class Node:
 
         return T_m1_c2
 
-    def send_unity2map_pose(self,unity_pose,T_m1_c2):
+    def send_unity2map_pose(self,unity_pose,T_m1_c2,query_frame_id,timestamp_query):
             
         (t,q) = unity_pose                    
 
@@ -364,9 +377,9 @@ class Node:
 
         transform = utils.create_transform_stamped((t_inv[0],t_inv[1],t_inv[2]),
                               (q_inv[0],q_inv[1],q_inv[2],q_inv[3]),
-                               self.timestamp_query,
-                               'unity',
-                               'reloc_pose')
+                               timestamp_query,
+                               query_frame_id+'_unity',
+                               query_frame_id)
         if self.ros:
             self.br.sendTransform(transform)
 
@@ -382,8 +395,8 @@ class Node:
         q_unity = tf.transformations.quaternion_from_matrix(self.T_m2_m1_current)
 
         ps = PoseStamped()
-        ps.header.stamp = self.timestamp_query
-        ps.header.frame_id = 'unity'
+        ps.header.stamp = timestamp_query
+        ps.header.frame_id = query_frame_id+'_unity'
         ps.pose.position.x = t_unity[0]
         ps.pose.position.y = t_unity[1]
         ps.pose.position.z = t_unity[2]

@@ -7,28 +7,14 @@
   <arg name="depth_topic" default="/livox/depth" />
   <arg name="camera_info_topic" default="/intel/color/camera_info" />
   
-  <arg name="query_device" default="HL2" />
-
-  <arg name="compressed" default="false"/>
   <arg name="undistort" default="false"/>
-
-  <!-- Undistort RGB node -->
-  <include if="$(arg undistort)" file="$(find mapping_kit)/launch/include/undistort.launch" pass_all_args="true" />
-
-  <!-- Uncompress HL2 images node -->
-  <node pkg="image_transport" type="republish" name="uncompress_$(arg query_device)" args="compressed in:=$(arg query_device)/camera/image out:=$(arg query_device)/camera/image_uncompressed" />
 
   <node pkg="localization" type="ssloc.py" name="self_localization" output="screen">
 
-    <remap from="image" to="$(arg image_topic)" />
+    <remap if="$(arg undistort)" from="image" to="$(arg image_topic)_rect" />
+    <remap unless="$(arg undistort)" from="image" to="$(arg image_topic)" />
     <remap from="camera_info" to="$(arg camera_info_topic)" />
     <remap from="depth" to="$(arg depth_topic)" />
-
-    <remap from="image_query" to="$(arg query_device)/camera/image_uncompressed" />
-    <remap from="camera_info_query" to="$(arg query_device)/camera/camera_info" />
-    <remap from="pose_query" to="$(arg query_device)/camera/pose" />
-
-    <remap from="reloc_pose" to="$(arg query_device)/camera/reloc_pose" />
 
     <param name="send_unity_pose" value="true" />
     <param name="map_frame_id" value="world"/>  

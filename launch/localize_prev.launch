@@ -1,22 +1,26 @@
 <launch>
 
-  <arg name="save_directory" default="$(env HOME)/datasets/22-05-20-StructuresLab-processed/anchors"/>
+  <arg name="save_directory" default="$(env HOME)/datasets/processed/anchors"/>
+  <arg name="create_new_anchors" default="false"/>
 
-  <!-- Uncompress HL2 images node -->
-  <node pkg="image_transport" type="republish" name="uncompress2" args="compressed in:=/HL2/camera/image out:=/HL2/camera/image_rect" />
+  <arg name="image_topic" default="/livox/color_sync/image_rect" />
+  <arg name="depth_topic" default="/livox/depth" />
+  <arg name="camera_info_topic" default="/intel/color/camera_info" />
+  
+  <arg name="undistort" default="false"/>
 
   <node pkg="localization" type="ssloc.py" name="self_localization" output="screen">
 
-    <remap from="image_query" to="/HL2/camera/image_rect" />
-    <remap from="camera_info_query" to="/HL2/camera/camera_info" />
-    <remap from="pose_query" to="/HL2/camera/pose" />
-
-    <remap from="reloc_pose" to="/HL2/camera/reloc_pose" />
+    <remap if="$(arg undistort)" from="image" to="$(arg image_topic)_rect" />
+    <remap unless="$(arg undistort)" from="image" to="$(arg image_topic)" />
+    <remap from="camera_info" to="$(arg camera_info_topic)" />
+    <remap from="depth" to="$(arg depth_topic)" />
 
     <param name="send_unity_pose" value="true" />
-    <param name="map_frame_id" value="world"/>       
+    <param name="map_frame_id" value="world"/>  
+    <param name="camera_frame_id" value="camera_frame"/>      
     <param name="save_directory" value="$(arg save_directory)" />
-    <param name="create_new_anchors" value="false" />
+    <param name="create_new_anchors" value="$(arg create_new_anchors)" />
 
   </node>  
 
