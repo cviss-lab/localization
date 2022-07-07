@@ -17,7 +17,6 @@ import cv2
 import utils
 import matplotlib.pyplot as plt
 from scipy.spatial.transform import Rotation
-import MDAnalysis
 
 hloc_module = join(dirname(realpath(__file__)), 'hloc_toolbox')
 sys.path.insert(0, hloc_module)
