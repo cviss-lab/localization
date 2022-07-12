@@ -38,7 +38,7 @@ class Node:
             self.detector = rospy.get_param('~detector',default='SuperPoint')
             self.matcher = rospy.get_param('~matcher',default='SuperGlue')  
             self.sliding_average_buffer = rospy.get_param('~sliding_average_buffer',default=1)       
-            self.num_retrieved_anchors = rospy.get_param('~num_retrieved_anchors',default=1)        
+            self.num_retrieved_anchors = rospy.get_param('~num_retrieved_anchors',default=5)        
 
             self.results_dir = rospy.get_param('~save_directory',default='results')
             self.create_new_anchors = rospy.get_param('~create_new_anchors',default=False)        
