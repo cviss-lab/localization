@@ -38,9 +38,11 @@ class Node:
             self.detector = rospy.get_param('~detector',default='SuperPoint')
             self.matcher = rospy.get_param('~matcher',default='SuperGlue')  
             self.sliding_average_buffer = rospy.get_param('~sliding_average_buffer',default=1)       
+            self.num_retrieved_anchors = rospy.get_param('~num_retrieved_anchors',default=1)        
+
             self.results_dir = rospy.get_param('~save_directory',default='results')
             self.create_new_anchors = rospy.get_param('~create_new_anchors',default=False)        
-            self.num_query_devices = rospy.get_param('/num_users',default=1)        
+            self.num_query_devices = rospy.get_param('/num_users',default=1) 
 
             self.ls = tf.TransformListener()
             self.br = tf2_ros.StaticTransformBroadcaster()
@@ -247,8 +249,8 @@ class Node:
 
         for i,(p,s) in enumerate(zip(pairs,scores)):
 
-            # if i > 1:
-            #     break
+            if i > self.num_retrieved_anchors:
+                break
 
             if s < 0.1:
                 continue
@@ -336,6 +338,28 @@ class Node:
             pose1 = np.loadtxt(join(self.results_dir,'poses','pose_%i.txt' % ret_index1))
             T_c2_m1 = utils.Tmatrix_inverse(T_m1_c2)           
             self.check_error(I1,I2,D1,pose1,K1,K2,kp1,kp2,matches1,'interactive',T_c2_m1,inliers)
+
+    def load_anchor(kp1, D1, K1, pose1):
+        pts1 = np.float32([ kp.pt for kp in kp1 ])
+        x_c,y_c,z_c = utils.project_2d_to_3d(pts1.T,K1,D1)
+        pts3D_c = np.array([x_c,y_c,z_c,np.ones(x_c.shape[0])])
+
+        tc = pose1[:3]
+        qc = pose1[3:]
+        T_m1_c1 = tf.transformations.quaternion_matrix(qc)
+        T_m1_c1[:3,3] = tc
+
+        pts3D_m = T_m1_c1.dot(pts3D_c)
+        pts3D_m = pts3D_m[:3,:]/pts3D_m[3,:]
+
+        pts3D_m = pts3D_m.T  
+
+        valid = np.array([i for i,p in enumerate(pts3D_m) if not np.any(np.isnan(p))])
+        pts3D_m = pts3D_m[valid]
+        kp1 = [kp1[v] for v in valid]
+        des1 = des1[valid,:]    
+
+        return pts3D_m           
 
     def send_reloc_pose(self,C,R,query_frame_id,timestamp_query):
         R2 = np.eye(4)

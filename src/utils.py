@@ -327,3 +327,147 @@ def detect_manual(I,m,s,h=0.05):
     objects.append(obj)     
 
     return objects
+
+
+def multiviewSolvePnPRansac(pts3D, pts_idx, pts2D_l, poses_l, K2, max_reproj_error=25, max_iterations=1000):
+
+    n_test = 4
+    n_imgs = len(pts2D_l)
+    iterations = 0
+    T_m1_m2 = None
+    if len(poses_l[0])>7:
+        k0 = len(poses_l[0])-6
+    else:
+        k0 = 0
+    T_m2_c_l = [pose2matrix(pose[k0:]) for pose in poses_l]
+    best_inlier_idxs = [[] for _ in range(n_imgs)]  
+    best_err = None
+    # for i_img in range(n_imgs):
+    iterations = 0
+    best_inlier_idxs = [[] for _ in range(n_imgs)]  
+    while iterations < max_iterations:
+        i_img = np.random.randint(0,n_imgs)
+        n_data = pts2D_l[i_img].shape[0]
+        test_idxs = np.random.randint(0,n_data,n_test)
+        pts2D_test = pts2D_l[i_img][test_idxs,:]
+        pts3D_test = pts3D[pts_idx[i_img]][test_idxs,:]
+        retval,rvecs_test,tvecs_test = cv2.solvePnP(pts3D_test,pts2D_test,K2,None,flags=cv2.SOLVEPNP_P3P)
+        if not retval:
+            continue
+        T_m1_c_test = poses2matrix(tvecs_test,rvecs_test)
+        T_m2_c = T_m2_c_l[i_img]
+        T_c_m2 = T_inv(T_m2_c)
+        T_m1_m2_test = np.dot(T_m1_c_test,T_c_m2)
+
+        test_err = multiview_pnp_error(pts3D, pts_idx, pts2D_l, K2, T_m1_m2_test, T_m2_c_l)
+        inlier_idxs = [np.where([e < max_reproj_error])[1].tolist() for e in test_err] # select indices of rows with accepted points
+
+        if len_subelems(inlier_idxs) > len_subelems(best_inlier_idxs):
+            T_m1_m2 = T_m1_m2_test
+            best_inlier_idxs = inlier_idxs
+            best_err = [np.array(e,dtype=np.int) for e in test_err]
+            # print(T_m1_m2[:3,3])
+        iterations+=1
+        
+    tvecs_l = [matrix2poses(T_m1_m2.dot(T_m2_c))[0] for T_m2_c in T_m2_c_l]
+    rvecs_l = [matrix2poses(T_m1_m2.dot(T_m2_c))[1] for T_m2_c in T_m2_c_l]
+
+    return T_m1_m2,tvecs_l,rvecs_l,best_inlier_idxs
+
+def apply_bundle_adjustment(pts3D,pts_idx,pts2D_l,tvecs_l,rvecs_l,K,plot=False):
+
+    from bundle_adjustment import BundleAdjustment2
+
+    bundle_adjustment = BundleAdjustment2(optimize_points=False,attach_cameras=True)
+
+    bundle_adjustment.read_from_data(pts3D,pts_idx,pts2D_l,tvecs_l,rvecs_l,K)
+
+    n_cameras = bundle_adjustment.camera_params.shape[0]
+    n_points = bundle_adjustment.points_3d.shape[0]
+
+    n = 9 * n_cameras + 3 * n_points
+    m = 2 * bundle_adjustment.points_2d.shape[0]
+
+    print("n_cameras: {}".format(n_cameras))
+    print("n_points: {}".format(n_points))
+    print("Total number of parameters: {}".format(n))
+    print("Total number of residuals: {}".format(m))
+
+    _,f0 = bundle_adjustment.fun_init()
+
+    if plot:
+        bundle_adjustment.init_viz()
+        bundle_adjustment.add_viz('c')
+        
+    bundle_adjustment.bundle_adjustment_sparsity()
+    t0 = time.time()
+
+    res = bundle_adjustment.least_squares()
+    t1 = time.time()    
+
+    print("Optimization took {0:.0f} seconds".format(t1 - t0))
+
+    if plot:
+        bundle_adjustment.add_viz('r')
+        plt.show()
+
+        plt.plot(f0)
+        plt.plot(res.fun)
+        
+        plt.show()  
+
+    return bundle_adjustment.tvecs, bundle_adjustment.rvecs  
+
+def pnp_error(pts3D,pts2D,rvecs,tvecs,K2):
+    pts2D_reproj = cv2.projectPoints(pts3D,rvecs,tvecs,K2,None)[0].reshape(-1,2)
+    e = np.linalg.norm(pts2D-pts2D_reproj,axis=1)    
+    return e
+
+def multiview_pnp_error(pts3D, pts_idx, pts2D_l, K2, T_m1_m2_test, T_m2_c_l):
+    n = len(pts2D_l)
+    e_l = [None for _ in range(n)]
+    for i in range(n):
+        pts3D_i = pts3D[pts_idx[i],:]
+        pts2D_i = pts2D_l[i]
+        T_m1_ci = T_m1_m2_test.dot(T_m2_c_l[i])
+        tvecs,rvecs = matrix2poses(T_m1_ci)
+        e_l[i] = pnp_error(pts3D_i,pts2D_i,rvecs,tvecs,K2)
+    return e_l
+
+def poses2matrix(tvecs,rvecs):
+    R_ = cv2.Rodrigues(rvecs)[0]
+    R = R_.T
+    C = -R_.T.dot(tvecs)      
+    T_m_c = np.eye(4)
+    T_m_c[:3,:3] = R
+    T_m_c[:3,3] = C.reshape(-1)
+    return T_m_c
+
+def pose2matrix(pose):
+    p = pose[:3]
+    q = pose[3:]
+    R = Rotation.from_quat(q)
+    T_m_c = np.eye(4)
+    T_m_c[:3,:3] = R.as_matrix()
+    T_m_c[:3,3] = p
+    return T_m_c
+
+def matrix2poses(T_m_c):
+    R = T_m_c[:3,:3]
+    C = T_m_c[:3,3]
+
+    rvecs = cv2.Rodrigues(R.T)[0]
+    tvecs = -R.T.dot(C.reshape(3,1))      
+
+    return tvecs,rvecs    
+
+def T_inv(Tmat):
+    R = Tmat[:3,:3]
+    t = Tmat[:3,3]
+    Tmat_inv = np.eye(4)
+    Tmat_inv[:3,:3] = R.T
+    Tmat_inv[:3,3] = -R.T.dot(t)
+    return Tmat_inv 
+
+def len_subelems(l):
+    return np.sum([len(sl) for sl in l])    
