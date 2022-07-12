@@ -2,8 +2,6 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="74937f88-77a3-4b2f-b970-afcdf0630282" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/ssloc_offline.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/ssloc_offline.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -34,7 +32,6 @@
   "keyToString": {
     "RunOnceActivity.OpenProjectViewOnStart": "true",
     "RunOnceActivity.ShowReadmeOnStart": "true",
-    "SHARE_PROJECT_CONFIGURATION_FILES": "true",
     "WebServerToolWindowFactoryState": "false",
     "last_opened_file_path": "/home/jp/Desktop/Rishabh/localization",
     "nodejs_package_manager_path": "npm",
@@ -107,7 +104,7 @@
       <workItem from="1657125252623" duration="944000" />
       <workItem from="1657126233496" duration="6765000" />
       <workItem from="1657134907708" duration="13727000" />
-      <workItem from="1657222865245" duration="4734000" />
+      <workItem from="1657222865245" duration="10999000" />
     </task>
     <task id="LOCAL-00001" summary="&quot;offline mode added&quot;">
       <created>1657125421108</created>
@@ -130,7 +127,21 @@
       <option name="project" value="LOCAL" />
       <updated>1657138524491</updated>
     </task>
-    <option name="localTasksCounter" value="4" />
+    <task id="LOCAL-00004" summary="&quot;offline mode deployed&quot;">
+      <created>1657228225442</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1657228225442</updated>
+    </task>
+    <task id="LOCAL-00005" summary="&quot;offline mode deployed&quot;">
+      <created>1657228348178</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1657228348178</updated>
+    </task>
+    <option name="localTasksCounter" value="6" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -149,7 +160,8 @@
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="&quot;offline mode added&quot;" />
-    <option name="LAST_COMMIT_MESSAGE" value="&quot;offline mode added&quot;" />
+    <MESSAGE value="&quot;offline mode deployed&quot;" />
+    <option name="LAST_COMMIT_MESSAGE" value="&quot;offline mode deployed&quot;" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>

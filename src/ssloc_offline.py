@@ -63,8 +63,8 @@ class Node:
         # self.timeout = 3.0
         # self.counter = 0
 
-    def camera_info_callback(self, msg):
-        self.K1 = np.array(msg.K, dtype=np.float32).reshape(3, 3)
+    # def camera_info_callback(self, msg):
+    #     self.K1 = np.array(msg.K, dtype=np.float32).reshape(3, 3)
 
     def create_anchor(self, *args):
         try:
@@ -113,9 +113,9 @@ class Node:
 
             # rate = rospy.Rate(self.frame_rate)
 
-            self.counter += 1
-
-            self.currently_running = False
+            # self.counter += 1
+            #
+            # self.currently_running = False
 
             # if self.ros:
             #     rate.sleep()
