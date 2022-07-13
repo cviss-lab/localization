@@ -2,7 +2,7 @@
 import os
 import shutil
 import cv2
-import cv2.aruco as aruco
+# import cv2.aruco as aruco
 import numpy as np
 from geometry_msgs.msg import Transform, TransformStamped
 from scipy.spatial.transform import Rotation
