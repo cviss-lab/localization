@@ -25,10 +25,23 @@ from hloc_toolbox import match_features, detect_features, search
 class Node:
 
     def __init__(self, ros=True, debug=False, data_folder=None, create_new_anchors=False):
-        # self.test()
+        
         self.ros = ros
         self.debug = debug
 
+        self.timestamp = None
+        self.timestamp_query = None
+        self.query_camera_frame_id = None
+        self.timeout = 1.5
+        self.counter = 0
+        
+        self.K1 = None
+        self.currently_running = False
+        self.T_m1_c2_buffer = []
+        self.T_m2_c2_buffer = []
+        self.T_m2_m1_current = None
+
+        # initialize parameters
         if self.ros:
             rospy.init_node('self_localization')
             self.map_frame_id = rospy.get_param('~map_frame_id',default='map')
@@ -43,6 +56,32 @@ class Node:
             self.results_dir = rospy.get_param('~save_directory',default='results')
             self.create_new_anchors = rospy.get_param('~create_new_anchors',default=False)        
             self.num_query_devices = rospy.get_param('/num_users',default=1) 
+        else:
+            self.map_frame_id = None
+            self.robot_camera_frame_id = None
+            self.send_unity_pose = False
+            self.frame_rate = 1
+            self.detector = 'SuperPoint'
+            self.matcher = 'SuperGlue'
+            self.sliding_average_buffer = 1      
+            self.results_dir = join(data_folder,'results')
+            self.create_new_anchors = create_new_anchors
+
+        # load models
+        self.matcher_model = None
+        self.detector_model = None
+        self.retrieval_model = None
+        self.load_models()
+
+        utils.make_dir(join(self.results_dir), delete_if_exists=self.create_new_anchors)
+        utils.make_dir(join(self.results_dir,'local_features'))
+        utils.make_dir(join(self.results_dir,'global_features'))
+        utils.make_dir(join(self.results_dir,'rgb'))
+        utils.make_dir(join(self.results_dir,'depth'))
+        utils.make_dir(join(self.results_dir,'poses'))
+
+        # register publishers & subscribers then spin node
+        if self.ros:
 
             self.ls = tf.TransformListener()
             self.br = tf2_ros.StaticTransformBroadcaster()
@@ -91,43 +130,6 @@ class Node:
             self.pub2 = rospy.Publisher('retrieved_image', Image, queue_size=1)
             self.pub3 = rospy.Publisher('matches_image', Image, queue_size=1)
 
-
-        else:
-            self.map_frame_id = None
-            self.robot_camera_frame_id = None
-            self.send_unity_pose = False
-            self.frame_rate = 1
-            self.detector = 'SuperPoint'
-            self.matcher = 'SuperGlue'
-            self.sliding_average_buffer = 1      
-            self.results_dir = join(data_folder,'results')
-            self.create_new_anchors = create_new_anchors
-
-        self.K1 = None
-        self.currently_running = False
-        self.T_m1_c2_buffer = []
-        self.T_m2_c2_buffer = []
-        self.T_m2_m1_current = None
-
-        self.matcher_model = None
-        self.detector_model = None
-        self.retrieval_model = None
-        self.load_models()
-
-        utils.make_dir(join(self.results_dir), delete_if_exists=self.create_new_anchors)
-        utils.make_dir(join(self.results_dir,'local_features'))
-        utils.make_dir(join(self.results_dir,'global_features'))
-        utils.make_dir(join(self.results_dir,'rgb'))
-        utils.make_dir(join(self.results_dir,'depth'))
-        utils.make_dir(join(self.results_dir,'poses'))
-
-        self.timestamp = None
-        self.timestamp_query = None
-        self.query_camera_frame_id = None
-        self.timeout = 3.0
-        self.counter = 0
-
-        if ros:
             rospy.spin()
 
     def camera_info_callback(self,msg):
@@ -155,6 +157,7 @@ class Node:
                     pose1 = pose1[0]+pose1[1]
                 except Exception as e:
                     print(e)
+                    self.currently_running = False   
                     return
 
                 cv_bridge = CvBridge()
@@ -214,130 +217,133 @@ class Node:
 
     def callback_query(self,*args):
         print('query image recieved!')
-        if self.ros:
-            query_frame_id = args[0].header.frame_id      
-            timestamp_query = args[0].header.stamp            
-            if self.send_unity_pose:
-                # unity_pose = self.ls.lookupTransform(self.query_camera_frame_id, 'unity', rospy.Time(0))
-                unity_pose = utils.unpack_pose(args[2].pose)
-
-            cv_bridge = CvBridge()
-            # I2 = cv_bridge.imgmsg_to_cv2(args[0], desired_encoding='passthrough')         
-            I2 = cv_bridge.compressed_imgmsg_to_cv2(args[0])         
-            K2 = np.array(args[1].K,dtype=np.float32).reshape(3,3) 
-        else:
-            I2 = args[0]
-            K2 = args[1]
-
-        print('Detecting local features in query image...')
-        fname2_local = join(self.results_dir,'local_features','local_q.h5')        
-        kp2, des2 = self.feature_detection(I2, self.detector, fname2_local, model=self.detector_model)
-        
-        print('Retrieving similar anchors...')
-        fdir_db = join(self.results_dir,'global_features')
-        fname2_global = join(self.results_dir,'global_q.h5')
-        self.feature_detection(I2, 'netvlad', fname2_global, model=self.retrieval_model, id='q.jpg')
-
-        pairs,scores = search.main(fname2_global,fdir_db,num_matches=20)
-        
-        # print('\nsimilarity score between anchor and query: %.4f' % scores[0])
-        pts2D_all = np.array([]).reshape(0,2)
-        pts3D_all = np.array([]).reshape(0,3)
-
-        matches1 = []
-        ret_index1 = None
-
-        for i,(p,s) in enumerate(zip(pairs,scores)):
-
-            if i > self.num_retrieved_anchors:
-                break
-
-            if s < 0.1:
-                continue
-
-            ret_index = int(p[1].replace('.jpg',''))
-            print('retrieved anchor %i\n' % ret_index)
-
-            # load rgb image
-            I1 = cv2.imread(join(self.results_dir,'rgb','rgb_%i.png' % ret_index))
-            D1 = cv2.imread(join(self.results_dir,'depth','depth_%i.png' % ret_index),cv2.IMREAD_UNCHANGED)
-            K1 = np.loadtxt(join(self.results_dir,'K1.txt'))
-            pose1 = np.loadtxt(join(self.results_dir,'poses','pose_%i.txt' % ret_index))
+        try:
             if self.ros:
-                self.pub2.publish(cv_bridge.cv2_to_imgmsg(I1, encoding='passthrough'))
+                query_frame_id = args[0].header.frame_id      
+                timestamp_query = args[0].header.stamp            
+                if self.send_unity_pose:
+                    # unity_pose = self.ls.lookupTransform(self.query_camera_frame_id, 'unity', rospy.Time(0))
+                    unity_pose = utils.unpack_pose(args[2].pose)
 
-            fname1_local = join(self.results_dir,'local_features','local_%i.h5' % ret_index)             
-            kp1 = detect_features.load_features(fname1_local)
-            des1 = None # not used for superpoint
+                cv_bridge = CvBridge()
+                # I2 = cv_bridge.imgmsg_to_cv2(args[0], desired_encoding='passthrough')         
+                I2 = cv_bridge.compressed_imgmsg_to_cv2(args[0])         
+                K2 = np.array(args[1].K,dtype=np.float32).reshape(3,3) 
+            else:
+                I2 = args[0]
+                K2 = args[1]
 
-            print('Matching features in query image...')
-            matches = self.feature_matching(des1,des2,self.detector,self.matcher, fname1_local, fname2_local, model=self.matcher_model)
+            print('Detecting local features in query image...')
+            fname2_local = join(self.results_dir,'local_features','local_q.h5')        
+            kp2, des2 = self.feature_detection(I2, self.detector, fname2_local, model=self.detector_model)
+            
+            print('Retrieving similar anchors...')
+            fdir_db = join(self.results_dir,'global_features')
+            fname2_global = join(self.results_dir,'global_q.h5')
+            self.feature_detection(I2, 'netvlad', fname2_global, model=self.retrieval_model, id='q.jpg')
 
-            img_matches = self.draw_matches_ros(I1,I2,kp1,kp2,matches)
-            if self.ros:
-                self.pub3.publish(cv_bridge.cv2_to_imgmsg(img_matches, encoding='passthrough'))             
+            pairs,scores = search.main(fname2_global,fdir_db,num_matches=20)
+            
+            # print('\nsimilarity score between anchor and query: %.4f' % scores[0])
+            pts2D_all = np.array([]).reshape(0,2)
+            pts3D_all = np.array([]).reshape(0,3)
 
-            if len(matches) >len(matches1):
-                matches1 = matches
-                ret_index1 = ret_index
+            matches1 = []
+            ret_index1 = None
 
-            if len(matches) > 10:
-                pts1 = np.float32([ kp1[m.queryIdx].pt for m in matches ])
-                pts2 = np.float32([ kp2[m.trainIdx].pt for m in matches ])
+            for i,(p,s) in enumerate(zip(pairs,scores)):
 
-                x_c,y_c,z_c = utils.project_2d_to_3d(pts1.T,K1,D1,h=0)
-
-                pts3D_c = np.array([x_c,y_c,z_c,np.ones(x_c.shape[0])])
-
-                tc = pose1[:3]
-                qc = pose1[3:]
-                T_m1_c1 = tf.transformations.quaternion_matrix(qc)
-                T_m1_c1[:3,3] = tc
-
-                pts3D = T_m1_c1.dot(pts3D_c)
-                pts3D = pts3D[:3,:]/pts3D[3,:]
-
-                pts3D = pts3D.T            
-                
-                idx = np.array([i for i,p in enumerate(pts3D) if not np.any(np.isnan(p))])
-                if len(idx) == 0:
+                if i > self.num_retrieved_anchors:
                     break
 
-                pts3D = pts3D[idx]
-                pts2D = pts2[idx]
+                if s < 0.1:
+                    continue
 
-                pts2D_all = np.vstack([pts2D_all,pts2D])
-                pts3D_all = np.vstack([pts3D_all,pts3D])
+                ret_index = int(p[1].replace('.jpg',''))
+                print('retrieved anchor %i\n' % ret_index)
 
-        if pts2D_all.shape[0] < 10:
-            print('\nNo anchors found! Try again with another query image..\n')  
-            return
+                # load rgb image
+                I1 = cv2.imread(join(self.results_dir,'rgb','rgb_%i.png' % ret_index))
+                D1 = cv2.imread(join(self.results_dir,'depth','depth_%i.png' % ret_index),cv2.IMREAD_UNCHANGED)
+                K1 = np.loadtxt(join(self.results_dir,'K1.txt'))
+                pose1 = np.loadtxt(join(self.results_dir,'poses','pose_%i.txt' % ret_index))
+                if self.ros:
+                    self.pub2.publish(cv_bridge.cv2_to_imgmsg(I1, encoding='passthrough'))
 
-        retval,rvecs,tvecs,inliers=cv2.solvePnPRansac(pts3D_all, pts2D_all, K2, None,flags=cv2.SOLVEPNP_P3P)
-        
-        # find relocalized pose of query image relative to robot camera
-        R_ = cv2.Rodrigues(rvecs)[0]
-        R = R_.T
-        C = -R_.T.dot(tvecs)  
+                fname1_local = join(self.results_dir,'local_features','local_%i.h5' % ret_index)             
+                kp1 = detect_features.load_features(fname1_local)
+                des1 = None # not used for superpoint
 
-        # send localized pose relative to robot map
-        T_m1_c2=self.send_reloc_pose(C,R,query_frame_id,timestamp_query)
-        if self.send_unity_pose:
-            self.send_unity2map_pose(unity_pose,T_m1_c2,query_frame_id,timestamp_query)            
+                print('Matching features in query image...')
+                matches = self.feature_matching(des1,des2,self.detector,self.matcher, fname1_local, fname2_local, model=self.matcher_model)
 
-        print('\nquery camera localized!\n')  
+                img_matches = self.draw_matches_ros(I1,I2,kp1,kp2,matches)
+                if self.ros:
+                    self.pub3.publish(cv_bridge.cv2_to_imgmsg(img_matches, encoding='passthrough'))             
 
-        if not self.ros:
-            print('query camera transform:\n %s' % np.array2string(utils.Tmatrix_inverse(T_m1_c2)))
+                if len(matches) >len(matches1):
+                    matches1 = matches
+                    ret_index1 = ret_index
 
-        # calculate errors from markers
-        if self.debug:
-            I1 = cv2.imread(join(self.results_dir,'rgb','rgb_%i.png' % ret_index1))
-            D1 = cv2.imread(join(self.results_dir,'depth','depth_%i.png' % ret_index1),cv2.IMREAD_UNCHANGED)
-            K1 = np.loadtxt(join(self.results_dir,'K1.txt'))
-            pose1 = np.loadtxt(join(self.results_dir,'poses','pose_%i.txt' % ret_index1))
-            T_c2_m1 = utils.Tmatrix_inverse(T_m1_c2)           
-            self.check_error(I1,I2,D1,pose1,K1,K2,kp1,kp2,matches1,'interactive',T_c2_m1,inliers)
+                if len(matches) > 10:
+                    pts1 = np.float32([ kp1[m.queryIdx].pt for m in matches ])
+                    pts2 = np.float32([ kp2[m.trainIdx].pt for m in matches ])
+
+                    x_c,y_c,z_c = utils.project_2d_to_3d(pts1.T,K1,D1,h=0)
+
+                    pts3D_c = np.array([x_c,y_c,z_c,np.ones(x_c.shape[0])])
+
+                    tc = pose1[:3]
+                    qc = pose1[3:]
+                    T_m1_c1 = tf.transformations.quaternion_matrix(qc)
+                    T_m1_c1[:3,3] = tc
+
+                    pts3D = T_m1_c1.dot(pts3D_c)
+                    pts3D = pts3D[:3,:]/pts3D[3,:]
+
+                    pts3D = pts3D.T            
+                    
+                    idx = np.array([i for i,p in enumerate(pts3D) if not np.any(np.isnan(p))])
+                    if len(idx) == 0:
+                        break
+
+                    pts3D = pts3D[idx]
+                    pts2D = pts2[idx]
+
+                    pts2D_all = np.vstack([pts2D_all,pts2D])
+                    pts3D_all = np.vstack([pts3D_all,pts3D])
+
+            if pts2D_all.shape[0] < 10:
+                print('\nNo anchors found! Try again with another query image..\n')  
+                return
+
+            retval,rvecs,tvecs,inliers=cv2.solvePnPRansac(pts3D_all, pts2D_all, K2, None,flags=cv2.SOLVEPNP_P3P)
+            
+            # find relocalized pose of query image relative to robot camera
+            R_ = cv2.Rodrigues(rvecs)[0]
+            R = R_.T
+            C = -R_.T.dot(tvecs)  
+
+            # send localized pose relative to robot map
+            T_m1_c2=self.send_reloc_pose(C,R,query_frame_id,timestamp_query)
+            if self.send_unity_pose:
+                self.send_unity2map_pose(unity_pose,T_m1_c2,query_frame_id,timestamp_query)            
+
+            print('\nquery camera localized!\n')  
+
+            if not self.ros:
+                print('query camera transform:\n %s' % np.array2string(utils.Tmatrix_inverse(T_m1_c2)))
+
+            # calculate errors from markers
+            if self.debug:
+                I1 = cv2.imread(join(self.results_dir,'rgb','rgb_%i.png' % ret_index1))
+                D1 = cv2.imread(join(self.results_dir,'depth','depth_%i.png' % ret_index1),cv2.IMREAD_UNCHANGED)
+                K1 = np.loadtxt(join(self.results_dir,'K1.txt'))
+                pose1 = np.loadtxt(join(self.results_dir,'poses','pose_%i.txt' % ret_index1))
+                T_c2_m1 = utils.Tmatrix_inverse(T_m1_c2)           
+                self.check_error(I1,I2,D1,pose1,K1,K2,kp1,kp2,matches1,'interactive',T_c2_m1,inliers)
+        except Exception as e:
+            print(e)
 
     def load_anchor(kp1, D1, K1, pose1):
         pts1 = np.float32([ kp.pt for kp in kp1 ])
