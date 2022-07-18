@@ -4,6 +4,7 @@ import numpy as np
 import sys
 import os
 from os.path import join, dirname, realpath
+import Tm2_c2_test
 # import tf
 # import tf2_ros
 # import tf2_msgs
@@ -241,6 +242,7 @@ class Node:
         T_m1_c2[:3, :3] = R
         T_m1_c2[:3, 3] = C.reshape(-1)
 
+        return T_m1_c2
         # send localized pose relative to robot map
         # T_m1_c2 = self.send_reloc_pose(C, R, query_frame_id, timestamp_query)
         # if self.send_unity_pose:
@@ -622,4 +624,8 @@ if __name__ == '__main__':
     # n.K1 = K1
     # n.create_anchor(I1,D1,pose1)
 
-    n.callback_query(I2, K2)
+    transform_m1_c2 = n.callback_query(I2, K2)
+
+    sfm_file = '/home/jp/Desktop/Rishabh/Handheld/1m_debug6/0_6_less_img_ultra/reconstruction_global/sfm_data.json'
+    transform_m2_c2_list = Tm2_c2_test.return_T_M2_C2(sfm_file)
+    print("TEST")

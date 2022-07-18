@@ -2,6 +2,7 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="74937f88-77a3-4b2f-b970-afcdf0630282" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/src/Tm2_c2_test.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/ssloc_offline.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/ssloc_offline.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -33,12 +34,34 @@
     "RunOnceActivity.OpenProjectViewOnStart": "true",
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "WebServerToolWindowFactoryState": "false",
-    "last_opened_file_path": "/home/jp/Desktop/Rishabh/localization",
+    "last_opened_file_path": "/home/jp/Desktop/Rishabh/MTO",
     "nodejs_package_manager_path": "npm",
     "settings.editor.selected.configurable": "com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable"
   }
 }]]></component>
-  <component name="RunManager" selected="Python.ssloc_offline">
+  <component name="RunManager" selected="Python.Tm2_c2_test">
+    <configuration name="Tm2_c2_test" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+      <module name="localization" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/src" />
+      <option name="IS_MODULE_SDK" value="true" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/src/Tm2_c2_test.py" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
     <configuration name="Unnamed" type="PythonConfigurationType" factoryName="Python" nameIsGenerated="true">
       <module name="localization" />
       <option name="INTERPRETER_OPTIONS" value="" />
@@ -85,10 +108,12 @@
     </configuration>
     <list>
       <item itemvalue="Python.Unnamed" />
+      <item itemvalue="Python.Tm2_c2_test" />
       <item itemvalue="Python.ssloc_offline" />
     </list>
     <recent_temporary>
       <list>
+        <item itemvalue="Python.Tm2_c2_test" />
         <item itemvalue="Python.ssloc_offline" />
       </list>
     </recent_temporary>
@@ -104,7 +129,7 @@
       <workItem from="1657125252623" duration="944000" />
       <workItem from="1657126233496" duration="6765000" />
       <workItem from="1657134907708" duration="13727000" />
-      <workItem from="1657222865245" duration="10999000" />
+      <workItem from="1657222865245" duration="20149000" />
     </task>
     <task id="LOCAL-00001" summary="&quot;offline mode added&quot;">
       <created>1657125421108</created>
@@ -141,7 +166,14 @@
       <option name="project" value="LOCAL" />
       <updated>1657228348178</updated>
     </task>
-    <option name="localTasksCounter" value="6" />
+    <task id="LOCAL-00006" summary="&quot;conda env exported&quot;">
+      <created>1657657942141</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1657657942141</updated>
+    </task>
+    <option name="localTasksCounter" value="7" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -161,10 +193,18 @@
   <component name="VcsManagerConfiguration">
     <MESSAGE value="&quot;offline mode added&quot;" />
     <MESSAGE value="&quot;offline mode deployed&quot;" />
-    <option name="LAST_COMMIT_MESSAGE" value="&quot;offline mode deployed&quot;" />
+    <MESSAGE value="&quot;conda env exported&quot;" />
+    <option name="LAST_COMMIT_MESSAGE" value="&quot;conda env exported&quot;" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
+      <breakpoints>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/Tm2_c2_test.py</url>
+          <line>24</line>
+          <option name="timeStamp" value="12" />
+        </line-breakpoint>
+      </breakpoints>
       <default-breakpoints>
         <breakpoint type="python-exception">
           <properties notifyOnTerminate="true" exception="BaseException">
@@ -176,5 +216,6 @@
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/localization$ssloc_offline.coverage" NAME="ssloc_offline Coverage Results" MODIFIED="1657227886147" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
+    <SUITE FILE_PATH="coverage/localization$Tm2_c2_test.coverage" NAME="Tm2_c2_test Coverage Results" MODIFIED="1658175589793" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
   </component>
 </project>
