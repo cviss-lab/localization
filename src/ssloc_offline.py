@@ -1,19 +1,9 @@
 #!/usr/bin/env python3
-# import rospy
 import numpy as np
 import sys
 import os
 from os.path import join, dirname, realpath
-# import tf
-# import tf2_ros
-# import tf2_msgs
-# from geometry_msgs.msg import Transform, PoseStamped, TransformStamped, Point, Quaternion
-# from std_msgs.msg import String
-# from nav_msgs.msg import Path
-# from sensor_msgs.msg import CompressedImage, Image, CameraInfo
-# from cv_bridge import CvBridge, CvBridgeError
 import cv2
-# import message_filters
 import utils
 import matplotlib.pyplot as plt
 from scipy.spatial.transform import Rotation
@@ -56,15 +46,6 @@ class Node:
         utils.make_dir(join(self.results_dir, 'rgb'))
         utils.make_dir(join(self.results_dir, 'depth'))
         utils.make_dir(join(self.results_dir, 'poses'))
-
-        # self.timestamp = None
-        # self.timestamp_query = None
-        # self.query_camera_frame_id = None
-        # self.timeout = 3.0
-        # self.counter = 0
-
-    # def camera_info_callback(self, msg):
-    #     self.K1 = np.array(msg.K, dtype=np.float32).reshape(3, 3)
 
     def create_anchor(self, *args):
         try:
@@ -111,14 +92,6 @@ class Node:
 
             print('created anchor %i!' % self.counter)
 
-            # rate = rospy.Rate(self.frame_rate)
-
-            # self.counter += 1
-            #
-            # self.currently_running = False
-
-            # if self.ros:
-            #     rate.sleep()
 
         except Exception as e:
             self.currently_running = False
@@ -128,18 +101,6 @@ class Node:
     def callback_query(self, *args):
 
         print('query image recieved!')
-        # if self.ros:
-        #     query_frame_id = args[0].header.frame_id
-        #     timestamp_query = args[0].header.stamp
-        #     if self.send_unity_pose:
-        #         # unity_pose = self.ls.lookupTransform(self.query_camera_frame_id, 'unity', rospy.Time(0))
-        #         unity_pose = utils.unpack_pose(args[2].pose)
-        #
-        #     cv_bridge = CvBridge()
-        #     # I2 = cv_bridge.imgmsg_to_cv2(args[0], desired_encoding='passthrough')
-        #     I2 = cv_bridge.compressed_imgmsg_to_cv2(args[0])
-        #     K2 = np.array(args[1].K, dtype=np.float32).reshape(3, 3)
-        # else:
         I2 = args[0]
         K2 = args[1]
 
@@ -192,8 +153,7 @@ class Node:
             # img_matches_resize = utils.ResizeWithAspectRatio(img_matches, width=1920)
             # cv2.imshow('img', img_matches_resize)
             # cv2.waitKey(0)
-            # if self.ros:
-            #     self.pub3.publish(cv_bridge.cv2_to_imgmsg(img_matches, encoding='passthrough'))
+
 
             if len(matches) > len(matches1):
                 matches1 = matches
@@ -286,54 +246,6 @@ class Node:
 
         return T_m1_c2
 
-    # def send_unity2map_pose(self, unity_pose, T_m1_c2, query_frame_id, timestamp_query):
-    #
-    #     (t, q) = unity_pose
-    #
-    #     R = tf.transformations.quaternion_matrix(q)[:3, :3]
-    #     T_m2_c2 = np.eye(4)
-    #     T_m2_c2[:3, :3] = R
-    #     T_m2_c2[:3, 3] = t
-    #     self.T_m2_c2_buffer.append(T_m2_c2)
-    #     if len(self.T_m2_c2_buffer) > self.sliding_average_buffer:
-    #         self.T_m2_c2_buffer.pop(0)
-    #
-    #     R_inv = R.T
-    #     t_inv = -R_inv.dot(t)
-    #     R2 = np.eye(4)
-    #     R2[:3, :3] = R_inv
-    #     q_inv = tf.transformations.quaternion_from_matrix(R2)
-    #
-    #     transform = utils.create_transform_stamped((t_inv[0], t_inv[1], t_inv[2]),
-    #                                                (q_inv[0], q_inv[1], q_inv[2], q_inv[3]),
-    #                                                timestamp_query,
-    #                                                query_frame_id + '_unity',
-    #                                                query_frame_id)
-    #
-    #     # 1 element
-    #     # if len(self.T_m1_c2_buffer) == 1:
-    #     T_c2_m1 = utils.Tmatrix_inverse(T_m1_c2)
-    #     T_m2_m1 = np.dot(T_m2_c2, T_c2_m1)
-    #     self.T_m2_m1_current = T_m2_m1
-    #     # else:
-    #     # implement method to include previous localization results
-    #
-    #     t_unity = self.T_m2_m1_current[:3, 3]
-    #     q_unity = tf.transformations.quaternion_from_matrix(self.T_m2_m1_current)
-    #
-    #     ps = PoseStamped()
-    #     ps.header.stamp = timestamp_query
-    #     ps.header.frame_id = query_frame_id + '_unity'
-    #     ps.pose.position.x = t_unity[0]
-    #     ps.pose.position.y = t_unity[1]
-    #     ps.pose.position.z = t_unity[2]
-    #     ps.pose.orientation.x = q_unity[0]
-    #     ps.pose.orientation.y = q_unity[1]
-    #     ps.pose.orientation.z = q_unity[2]
-    #     ps.pose.orientation.w = q_unity[3]
-    #
-    #     # if self.ros:
-    #     #     self.pub.publish(ps)
 
     def feature_detection(self, I, detector, fname=None, model=None, id=None):
 
@@ -623,7 +535,7 @@ if __name__ == '__main__':
     file = '/home/jp/Desktop/Rishabh/Handheld/localisation_structures_hl2/0_6_less_img_normal/reconstruction_global/sfm_data.json'
 
     T_m2_c2_list = utils.return_T_M2_C2(file)
-    query_img_idx = 111
+    query_img_idx = 59
     I2 = cv2.imread(join(data_folder, str(query_img_idx)+'.jpg'))
     K2 = np.loadtxt(join(data_folder, 'K2.txt'))
     T_m2_c2=T_m2_c2_list[query_img_idx-1]
