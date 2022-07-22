@@ -6,6 +6,7 @@ import cv2.aruco as aruco
 import numpy as np
 # from geometry_msgs.msg import Transform, TransformStamped
 from scipy.spatial.transform import Rotation
+import json
 
 def make_dir(path,delete_if_exists=False):   
     if not os.path.exists(path):
@@ -13,6 +14,40 @@ def make_dir(path,delete_if_exists=False):
     elif delete_if_exists:
         shutil.rmtree(path)
         os.makedirs(path)
+def ResizeWithAspectRatio(image, width=None, height=None, inter=cv2.INTER_AREA):
+    dim = None
+    (h, w) = image.shape[:2]
+
+    if width is None and height is None:
+        return image
+    if width is None:
+        r = height / float(h)
+        dim = (int(w * r), height)
+    else:
+        r = width / float(w)
+        dim = (width, int(h * r))
+
+    return cv2.resize(image, dim, interpolation=inter)
+
+def return_T_M2_C2(sfm_file):
+    # sfm_file = '/home/jp/Desktop/Rishabh/Handheld/1m_debug6/0_6_less_img_ultra/reconstruction_global/sfm_data.json'
+    with open(sfm_file, 'r') as f:
+        sfm = json.load(f)
+
+    T_m2_c2_list = []
+    for i in range(len(sfm['views'])):
+        # print(sfm['views'])
+        rotation = np.array(sfm['extrinsics'][i]['value']['rotation'])
+        centers = np.array(sfm['extrinsics'][i]['value']['center'])
+        T_m2_c2 = np.eye(4)
+        R = rotation.T
+        # t = R.dot(-centers).reshape(-1, 1)
+        C = centers.reshape((-1, 1))
+        # Tm2_c2 = np.hstack([R, t])
+        T_m2_c2[:3, :3] = R
+        T_m2_c2[:3, 3] = C.reshape(-1)
+        T_m2_c2_list.append(T_m2_c2)
+    return T_m2_c2_list
 
 def pinhole_model(pose,K):
     """Loads projection and extrensics information for a pinhole camera model

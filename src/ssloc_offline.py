@@ -50,7 +50,7 @@ class Node:
         self.retrieval_model = None
         self.load_models()
 
-        utils.make_dir(join(self.results_dir), delete_if_exists=self.create_new_anchors)
+        # utils.make_dir(join(self.results_dir), delete_if_exists=self.create_new_anchors)
         utils.make_dir(join(self.results_dir, 'local_features'))
         utils.make_dir(join(self.results_dir, 'global_features'))
         utils.make_dir(join(self.results_dir, 'rgb'))
@@ -126,6 +126,7 @@ class Node:
             return
 
     def callback_query(self, *args):
+
         print('query image recieved!')
         # if self.ros:
         #     query_frame_id = args[0].header.frame_id
@@ -153,7 +154,7 @@ class Node:
 
         pairs, scores = search.main(fname2_global, fdir_db, num_matches=20)
 
-        # print('\nsimilarity score between anchor and query: %.4f' % scores[0])
+        print('\nsimilarity score between anchor and query: %.4f' % scores[0])
         pts2D_all = np.array([]).reshape(0, 2)
         pts3D_all = np.array([]).reshape(0, 3)
 
@@ -163,10 +164,10 @@ class Node:
         for i, (p, s) in enumerate(zip(pairs, scores)):
 
             if i > 5:
-                break
+                break  # terminate loop
 
             if s < 0.1:
-                continue
+                continue  # skip the current iteration of the loop
 
             ret_index = int(p[1].replace('.jpg', ''))
             print('retrieved anchor %i\n' % ret_index)
@@ -187,7 +188,10 @@ class Node:
             matches = self.feature_matching(des1, des2, self.detector, self.matcher, fname1_local, fname2_local,
                                             model=self.matcher_model)
 
-            # img_matches = self.draw_matches_ros(I1, I2, kp1, kp2, matches)
+            img_matches = self.draw_matches_ros(I1, I2, kp1, kp2, matches)
+            # img_matches_resize = utils.ResizeWithAspectRatio(img_matches, width=1920)
+            # cv2.imshow('img', img_matches_resize)
+            # cv2.waitKey(0)
             # if self.ros:
             #     self.pub3.publish(cv_bridge.cv2_to_imgmsg(img_matches, encoding='passthrough'))
 
@@ -241,7 +245,6 @@ class Node:
         T_m1_c2[:3, :3] = R
         T_m1_c2[:3, 3] = C.reshape(-1)
 
-        return T_m1_c2
         # send localized pose relative to robot map
         # T_m1_c2 = self.send_reloc_pose(C, R, query_frame_id, timestamp_query)
         # if self.send_unity_pose:
@@ -253,13 +256,15 @@ class Node:
         # #     print('query camera transform:\n %s' % np.array2string(utils.Tmatrix_inverse(T_m1_c2)))
         #
         # # calculate errors from markers
-        # if self.debug:
-        #     I1 = cv2.imread(join(self.results_dir, 'rgb', 'rgb_%i.png' % ret_index1))
-        #     D1 = cv2.imread(join(self.results_dir, 'depth', 'depth_%i.png' % ret_index1), cv2.IMREAD_UNCHANGED)
-        #     K1 = np.loadtxt(join(self.results_dir, 'K1.txt'))
-        #     pose1 = np.loadtxt(join(self.results_dir, 'poses', 'pose_%i.txt' % ret_index1))
-        #     T_c2_m1 = utils.Tmatrix_inverse(T_m1_c2)
-        #     self.check_error(I1, I2, D1, pose1, K1, K2, kp1, kp2, matches1, 'interactive', T_c2_m1, inliers)
+        if self.debug:
+            I1 = cv2.imread(join(self.results_dir, 'rgb', 'rgb_%i.png' % ret_index1))
+            D1 = cv2.imread(join(self.results_dir, 'depth', 'depth_%i.png' % ret_index1), cv2.IMREAD_UNCHANGED)
+            K1 = np.loadtxt(join(self.results_dir, 'K1.txt'))
+            pose1 = np.loadtxt(join(self.results_dir, 'poses', 'pose_%i.txt' % ret_index1))
+            T_c2_m1 = utils.Tmatrix_inverse(T_m1_c2)
+            self.check_error(I1, I2, D1, pose1, K1, K2, kp1, kp2, matches1, 'interactive', T_c2_m1, inliers)
+
+        return T_m1_c2
 
     def send_reloc_pose(self, C, R, query_frame_id, timestamp_query):
         R2 = np.eye(4)
@@ -599,11 +604,12 @@ if __name__ == '__main__':
     # Node()
 
     # data_folder = '/home/zaid/datasets/22-05-04-E2-Handheld-processed/localization_test'
-    data_folder = '/home/jp/Desktop/Rishabh/Handheld/22-05-05-HomerWatsonBridge-processed/offline_localization_test'
+    # data_folder = '/home/jp/Desktop/Rishabh/Handheld/22-05-05-HomerWatsonBridge-processed/offline_localization_test'
+    data_folder = '/home/jp/Desktop/Rishabh/Handheld/localisation_structures_ig4'
 
     # I1 = cv2.imread(join(data_folder,'rgb_111.png'))
     # D1 = cv2.imread(join(data_folder,'depth_111.png'),cv2.IMREAD_UNCHANGED)
-    # K1 = np.loadtxt(join(data_folder,'K1.txt'))
+    K1 = np.loadtxt(join(data_folder, 'K1.txt'))
     # pose1 = np.loadtxt(join(data_folder,'pose_111.txt'))
 
     # pose1 = [0,0,0,-0.5,0.5,-0.5,0.5]
@@ -614,15 +620,35 @@ if __name__ == '__main__':
 
     # I2 = cv2.imread(join(data_folder,'HL2','49.jpg'))
     # K2 = np.loadtxt(join(data_folder,'K2.txt'))
+    file = '/home/jp/Desktop/Rishabh/Handheld/localisation_structures_hl2/0_6_less_img_normal/reconstruction_global/sfm_data.json'
 
-    I2 = cv2.imread(join(data_folder, '111.jpg'))
+    T_m2_c2_list = utils.return_T_M2_C2(file)
+    query_img_idx = 111
+    I2 = cv2.imread(join(data_folder, str(query_img_idx)+'.jpg'))
     K2 = np.loadtxt(join(data_folder, 'K2.txt'))
+    T_m2_c2=T_m2_c2_list[query_img_idx-1]
+    image_dir = join(data_folder, 'rgb')
+    num1_images = len([name for name in os.listdir(image_dir) if os.path.isfile(os.path.join(image_dir, name))])
+    poses = np.loadtxt(join(data_folder, 'poses.csv'), delimiter=",")
+    n = Node(debug=False, data_folder=data_folder, create_new_anchors=False)
 
-    n = Node(debug=True, data_folder=data_folder, create_new_anchors=False)
 
-    # n.K1 = K1
-    # n.create_anchor(I1,D1,pose1)
+    # for i in range(num1_images):
+    #     I1 = cv2.imread(join(data_folder, 'rgb', str(i + 1) + '.jpg'))
+    #     D1 = cv2.imread(join(data_folder, 'depth', str(i + 1) + '.png'), cv2.IMREAD_UNCHANGED)
+    #     pose1 = poses[i][1:8]
+    #
+    #     n.K1 = K1
+    #     # n.counter = i + 1
+    #     n.counter = i
+    #     n.create_anchor(I1, D1, pose1)
+    #     pose1 = poses
+    #     # n = Node(debug=True, data_folder=data_folder, create_new_anchors=False)
+    #     n = Node(debug=True, data_folder=data_folder, create_new_anchors=False)
 
-    transform_m1_c2 = n.callback_query(I2, K2)
+    # n = Node(debug=True, data_folder=data_folder, create_new_anchors=False)
+    T_m1_c2 = n.callback_query(I2, K2)
 
+    T_m1_m2 = T_m1_c2.dot(np.linalg.inv(T_m2_c2))
+    print(T_m1_m2)
     print("TEST")

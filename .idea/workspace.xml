@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="74937f88-77a3-4b2f-b970-afcdf0630282" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/src/Tm2_c2_test.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/spatial_align.py" afterDir="false" />
+    <list default="true" id="74937f88-77a3-4b2f-b970-afcdf0630282" name="Changes" comment="&quot;Hololens localisation (beta) added&quot;">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/spatial_align.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/spatial_align.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/ssloc_offline.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/ssloc_offline.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/utils.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -34,7 +36,7 @@
     "RunOnceActivity.OpenProjectViewOnStart": "true",
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "WebServerToolWindowFactoryState": "false",
-    "last_opened_file_path": "/home/jp/Desktop/Rishabh/MTO",
+    "last_opened_file_path": "/home/jp/Desktop/Rishabh/localization",
     "nodejs_package_manager_path": "npm",
     "settings.editor.selected.configurable": "com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable"
   }
@@ -113,8 +115,8 @@
     </list>
     <recent_temporary>
       <list>
-        <item itemvalue="Python.spatial_align" />
         <item itemvalue="Python.ssloc_offline" />
+        <item itemvalue="Python.spatial_align" />
       </list>
     </recent_temporary>
   </component>
@@ -130,6 +132,7 @@
       <workItem from="1657126233496" duration="6765000" />
       <workItem from="1657134907708" duration="13727000" />
       <workItem from="1657222865245" duration="21446000" />
+      <workItem from="1658441189920" duration="12266000" />
     </task>
     <task id="LOCAL-00001" summary="&quot;offline mode added&quot;">
       <created>1657125421108</created>
@@ -209,8 +212,33 @@
       <breakpoints>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/src/spatial_align.py</url>
-          <line>24</line>
+          <line>30</line>
           <option name="timeStamp" value="12" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/ssloc_offline.py</url>
+          <line>264</line>
+          <option name="timeStamp" value="15" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/ssloc_offline.py</url>
+          <line>405</line>
+          <option name="timeStamp" value="21" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/ssloc_offline.py</url>
+          <line>509</line>
+          <option name="timeStamp" value="24" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/spatial_align.py</url>
+          <line>10</line>
+          <option name="timeStamp" value="25" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/ssloc_offline.py</url>
+          <line>653</line>
+          <option name="timeStamp" value="28" />
         </line-breakpoint>
       </breakpoints>
       <default-breakpoints>
@@ -223,7 +251,8 @@
     </breakpoint-manager>
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
-    <SUITE FILE_PATH="coverage/localization$ssloc_offline.coverage" NAME="ssloc_offline Coverage Results" MODIFIED="1657227886147" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
     <SUITE FILE_PATH="coverage/localization$Tm2_c2_test.coverage" NAME="Tm2_c2_test Coverage Results" MODIFIED="1658175589793" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
+    <SUITE FILE_PATH="coverage/localization$ssloc_offline.coverage" NAME="ssloc_offline Coverage Results" MODIFIED="1658517564861" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
+    <SUITE FILE_PATH="coverage/localization$spatial_align.coverage" NAME="spatial_align Coverage Results" MODIFIED="1658514062532" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/src" />
   </component>
 </project>
