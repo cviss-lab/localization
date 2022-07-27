@@ -1,0 +1,3 @@
+[submodule "src/hloc_toolbox/third_party/LoFTR"]
+	path = src/hloc_toolbox/third_party/LoFTR
+	url = https://github.com/MACILLAS/LoFTR.git
