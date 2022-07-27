@@ -532,7 +532,7 @@ if __name__ == '__main__':
         n.counter = i
         n.create_anchor(I1, D1, pose1)
         print(i)
-        pose1 = poses
+        # pose1 = poses
 
     #For querying sfm data in a multi resolution map, not required for creating anchors
     # I2 = cv2.imread(join(data_folder,'HL2','49.jpg'))
