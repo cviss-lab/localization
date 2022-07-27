@@ -40,7 +40,7 @@ class Node:
         self.retrieval_model = None
         self.load_models()
 
-        # utils.make_dir(join(self.results_dir), delete_if_exists=self.create_new_anchors)
+        utils.make_dir(join(self.results_dir), delete_if_exists=self.create_new_anchors)
         utils.make_dir(join(self.results_dir, 'local_features'))
         utils.make_dir(join(self.results_dir, 'global_features'))
         utils.make_dir(join(self.results_dir, 'rgb'))
@@ -52,10 +52,10 @@ class Node:
             if self.K1 is None:
                 return
 
-            if self.currently_running:
-                return
-            else:
-                self.currently_running = True
+            # if self.currently_running:
+            #     return
+            # else:
+            #     self.currently_running = True
 
             print('creating new anchor...')
 
@@ -154,7 +154,6 @@ class Node:
             # cv2.imshow('img', img_matches_resize)
             # cv2.waitKey(0)
 
-
             if len(matches) > len(matches1):
                 matches1 = matches
                 ret_index1 = ret_index
@@ -245,7 +244,6 @@ class Node:
             self.T_m2_c2_buffer.pop(0)
 
         return T_m1_c2
-
 
     def feature_detection(self, I, detector, fname=None, model=None, id=None):
 
@@ -513,54 +511,41 @@ class Node:
 
 
 if __name__ == '__main__':
-    # Node()
 
-    # data_folder = '/home/zaid/datasets/22-05-04-E2-Handheld-processed/localization_test'
-    # data_folder = '/home/jp/Desktop/Rishabh/Handheld/22-05-05-HomerWatsonBridge-processed/offline_localization_test'
-    data_folder = '/home/jp/Desktop/Rishabh/Handheld/localisation_structures_ig4'
+    data_folder = "/home/jp/Desktop/Rishabh/Handheld/localisation_test_data"
 
-    # I1 = cv2.imread(join(data_folder,'rgb_111.png'))
-    # D1 = cv2.imread(join(data_folder,'depth_111.png'),cv2.IMREAD_UNCHANGED)
     K1 = np.loadtxt(join(data_folder, 'K1.txt'))
-    # pose1 = np.loadtxt(join(data_folder,'pose_111.txt'))
 
-    # pose1 = [0,0,0,-0.5,0.5,-0.5,0.5]
-    # T_lidar_front = np.loadtxt(join(data_folder,'T_lidar_front.txt'))
-    # t = T_lidar_front[:3,3]
-    # q = tf.transformations.quaternion_from_matrix(T_lidar_front)
-    # pose1 = t.tolist() + q.tolist()
-
-    # I2 = cv2.imread(join(data_folder,'HL2','49.jpg'))
-    # K2 = np.loadtxt(join(data_folder,'K2.txt'))
-    file = '/home/jp/Desktop/Rishabh/Handheld/localisation_structures_hl2/0_6_less_img_normal/reconstruction_global/sfm_data.json'
-
-    T_m2_c2_list = utils.return_T_M2_C2(file)
-    query_img_idx = 59
-    I2 = cv2.imread(join(data_folder, str(query_img_idx)+'.jpg'))
-    K2 = np.loadtxt(join(data_folder, 'K2.txt'))
-    T_m2_c2=T_m2_c2_list[query_img_idx-1]
     image_dir = join(data_folder, 'rgb')
     num1_images = len([name for name in os.listdir(image_dir) if os.path.isfile(os.path.join(image_dir, name))])
     poses = np.loadtxt(join(data_folder, 'poses.csv'), delimiter=",")
-    n = Node(debug=False, data_folder=data_folder, create_new_anchors=False)
+    n = Node(debug=False, data_folder=data_folder, create_new_anchors=True)
 
+    for i in range(num1_images):
 
-    # for i in range(num1_images):
-    #     I1 = cv2.imread(join(data_folder, 'rgb', str(i + 1) + '.jpg'))
-    #     D1 = cv2.imread(join(data_folder, 'depth', str(i + 1) + '.png'), cv2.IMREAD_UNCHANGED)
-    #     pose1 = poses[i][1:8]
+        I1 = cv2.imread(join(data_folder, 'rgb', str(i + 1) + '.jpg'))
+        D1 = cv2.imread(join(data_folder, 'depth', str(i + 1) + '.png'), cv2.IMREAD_UNCHANGED)
+        pose1 = poses[i][1:8]
+
+        n.K1 = K1
+        # n.counter = i + 1
+        n.counter = i
+        n.create_anchor(I1, D1, pose1)
+        print(i)
+        pose1 = poses
+
+    #For querying sfm data in a multi resolution map, not required for creating anchors
+    # I2 = cv2.imread(join(data_folder,'HL2','49.jpg'))
+    # K2 = np.loadtxt(join(data_folder,'K2.txt'))
+    # file = '/home/jp/Desktop/Rishabh/Handheld/localisation_structures_hl2/0_6_less_img_normal/reconstruction_global/sfm_data.json'
     #
-    #     n.K1 = K1
-    #     # n.counter = i + 1
-    #     n.counter = i
-    #     n.create_anchor(I1, D1, pose1)
-    #     pose1 = poses
-    #     # n = Node(debug=True, data_folder=data_folder, create_new_anchors=False)
-    #     n = Node(debug=True, data_folder=data_folder, create_new_anchors=False)
-
-    # n = Node(debug=True, data_folder=data_folder, create_new_anchors=False)
-    T_m1_c2 = n.callback_query(I2, K2)
-
-    T_m1_m2 = T_m1_c2.dot(np.linalg.inv(T_m2_c2))
-    print(T_m1_m2)
+    # T_m2_c2_list = utils.return_T_M2_C2(file)
+    # query_img_idx = 59
+    # I2 = cv2.imread(join(data_folder, str(query_img_idx) + '.jpg'))
+    # K2 = np.loadtxt(join(data_folder, 'K2.txt'))
+    # T_m2_c2 = T_m2_c2_list[query_img_idx - 1]
+    # T_m1_c2 = n.callback_query(I2, K2)
+    #
+    # T_m1_m2 = T_m1_c2.dot(np.linalg.inv(T_m2_c2))
+    # print(T_m1_m2)
     print("TEST")
