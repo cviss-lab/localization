@@ -12,10 +12,10 @@ sys.path.append(str(Path(__file__).parent / '../../third_party'))
 from LoFTR.src.loftr import LoFTR, default_cfg
 from copy import deepcopy
 
-class LoFTR(BaseModel):
+class loftr(BaseModel):
     default_conf = {
         'weights': 'outdoor_ds.ckpt',
-        'max_num_matches': None,
+        'max_num_matches': 5000,
     }
 
     required_inputs = [
@@ -24,27 +24,34 @@ class LoFTR(BaseModel):
     ]
 
     def _init(self, conf):
-        cfg = default_cfg
-        matcher = LoFTR(config=default_cfg)
+        #cfg = default_cfg
+        _default_cfg = deepcopy(default_cfg)
+        if str(conf['weights'])[0] == "i":
+            _default_cfg['coarse']['temp_bug_fix'] = True
 
-        ckpt_path = os.path.join("weights", conf['weights'])
+        matcher = LoFTR(config=_default_cfg)
+
+        ckpt_path = os.path.join("./hloc_toolbox/third_party/LoFTR", "weights", conf['weights'])
+
         matcher.load_state_dict(torch.load(ckpt_path)['state_dict'])
-        self.net = matcher = matcher.eval().cuda()
+        matcher = matcher.eval().cuda()
+        self.net = matcher
 
     def _forward(self, data):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            pred = self.net(data)
-
-        scores = pred['confidence']
+            with torch.no_grad():
+                self.net(data)
+                pred = data
+        scores = pred['mconf']
 
         top_k = self.conf['max_num_matches']
         if top_k is not None and len(scores) > top_k:
             keep = torch.argsort(scores, descending=True)[:top_k]
-            pred['keypoints0'], pred['keypoints1'] = \
-                pred['keypoints0'][keep], pred['keypoints1'][keep]
+            pred['mkpts0_f'], pred['mkpts1_f'] = \
+                pred['mkpts0_f'][keep], pred['mkpts1_f'][keep]
             scores = scores[keep]
 
-        pred['scores'] = scores
-        del pred['confidence']
+        pred['mconf'] = scores
+        #del pred['confidence']
         return pred

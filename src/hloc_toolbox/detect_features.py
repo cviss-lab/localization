@@ -43,7 +43,10 @@ def main(I1,fpath,detector,model=None,id=None):
     elif detector == 'netvlad':
         feature_conf = extract_features.confs['netvlad']
 
-    features_file = extract_features.main(feature_conf, images, outputs, feature_path=Path(fpath), model=model)   
+    if detector == "loftr":
+        pass
+    else:
+        features_file = extract_features.main(feature_conf, images, outputs, feature_path=Path(fpath), model=model)
 
     # delete temp image
     os.remove(join(dataset,id))

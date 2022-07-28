@@ -21,6 +21,13 @@ line using their name. Each is a dictionary with the following entries:
     - model: the model configuration, as passed to a feature matcher.
 '''
 confs = {
+    'loftr': {
+        'output': 'matches-images',
+        'model': {
+            'name': 'loftr',
+            'weights': 'outdoor_ds.ckpt',
+        },
+    },
     'superglue': {
         'output': 'matches-superglue',
         'model': {

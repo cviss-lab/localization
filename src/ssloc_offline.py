@@ -7,12 +7,13 @@ import cv2
 import utils
 import matplotlib.pyplot as plt
 from scipy.spatial.transform import Rotation
+import torch
 
 hloc_module = join(dirname(realpath(__file__)), 'hloc_toolbox')
 sys.path.insert(0, hloc_module)
 
 from hloc_toolbox import match_features, detect_features, search
-
+from hloc_toolbox.hloc.matchers import loftr
 
 class Node:
 
@@ -23,8 +24,8 @@ class Node:
         self.robot_camera_frame_id = None
         self.send_unity_pose = False
         self.frame_rate = 1
-        self.detector = 'SuperPoint'
-        self.matcher = 'SuperGlue'
+        self.detector = 'loftr'
+        self.matcher = 'loftr'
         self.sliding_average_buffer = 1
         self.results_dir = join(data_folder, 'results')
         self.create_new_anchors = create_new_anchors
@@ -141,18 +142,28 @@ class Node:
             # if self.ros:
             #     self.pub2.publish(cv_bridge.cv2_to_imgmsg(I1, encoding='passthrough'))
 
-            fname1_local = join(self.results_dir, 'local_features', 'local_%i.h5' % ret_index)
-            kp1 = detect_features.load_features(fname1_local)
-            des1 = None  # not used for superpoint
+            if self.detector == "loftr":
+                des1 = None
+                des2 = None
+                fname1_local = None
+                fname2_local = None
+            else:
+                fname1_local = join(self.results_dir, 'local_features', 'local_%i.h5' % ret_index)
+                kp1 = detect_features.load_features(fname1_local)
+                des1 = None  # not used for superpoint
 
             print('Matching features in query image...')
-            matches = self.feature_matching(des1, des2, self.detector, self.matcher, fname1_local, fname2_local,
-                                            model=self.matcher_model)
+            if self.matcher == "loftr":
+                matches, kp1, kp2 = self.feature_matching(des1, des2, self.detector, self.matcher, fname1_local, fname2_local,
+                                            model=self.matcher_model, img1=I1, img2=I2)
+            else:
+                matches = self.feature_matching(des1, des2, self.detector, self.matcher, fname1_local, fname2_local,
+                                            model=self.matcher_model, img1=I1, img2=I2)
 
             img_matches = self.draw_matches_ros(I1, I2, kp1, kp2, matches)
-            # img_matches_resize = utils.ResizeWithAspectRatio(img_matches, width=1920)
-            # cv2.imshow('img', img_matches_resize)
-            # cv2.waitKey(0)
+            img_matches_resize = utils.ResizeWithAspectRatio(img_matches, width=1920)
+            cv2.imshow('img', img_matches_resize)
+            cv2.waitKey(0)
 
             if len(matches) > len(matches1):
                 matches1 = matches
@@ -257,6 +268,8 @@ class Node:
         elif detector == 'SURF':
             surf = cv2.xfeatures2d.SURF_create()
             kp, des = surf.detectAndCompute(I, None)
+        elif detector == "loftr":
+            return None, None
         else:
             if os.path.exists(fname):
                 os.remove(fname)
@@ -265,7 +278,7 @@ class Node:
 
         return kp, des
 
-    def feature_matching(self, des1, des2, detector, matcher, fname1=None, fname2=None, model=None):
+    def feature_matching(self, des1, des2, detector, matcher, fname1=None, fname2=None, model=None, img1=None, img2=None):
 
         if detector == 'ORB' or detector == 'SIFT' or detector == 'SURF':
             bf = cv2.BFMatcher(cv2.NORM_L2, crossCheck=False)
@@ -276,6 +289,38 @@ class Node:
                     good.append(m)
             matches = good
             return matches
+        elif detector == "loftr":
+            img1 = img1.astype(np.uint8)
+            img2 = img2.astype(np.uint8)
+            img1 = cv2.cvtColor(img1, cv2.COLOR_RGB2GRAY)
+            img2 = cv2.cvtColor(img2, cv2.COLOR_RGB2GRAY)
+
+            img1 = cv2.resize(img1, (img1.shape[1] // 8 * 8, img1.shape[0] // 8 * 8))  # input size shuold be divisible by 8
+            img2 = cv2.resize(img2, (img2.shape[1] // 8 * 8, img2.shape[0] // 8 * 8))
+
+            img1 = torch.from_numpy(img1)[None][None].cuda() / 255.
+            img2 = torch.from_numpy(img2)[None][None].cuda() / 255.
+            batch = {'image0': img1, 'image1': img2}
+
+            matches = model(batch)
+
+            """
+            Need to go from matches which is a dictionary of torch tensors to opencv matches
+            https://docs.opencv.org/3.4/d4/de0/classcv_1_1DMatch.html#ab9800c265dcb748a28aa1a2d4b45eea4
+            """
+
+            mkpts0 = matches['mkpts0_f'].cpu().numpy()
+            mkpts1 = matches['mkpts1_f'].cpu().numpy()
+
+            matches = [None]*int(mkpts0.shape[0])
+            kp1 = [None]*int(mkpts0.shape[0])
+            kp2 = [None]*int(mkpts0.shape[0])
+            for i in range(mkpts0.shape[0]):
+                matches[i] = cv2.DMatch(i, i, 0)
+                kp1[i] = cv2.KeyPoint(mkpts0[i][0], mkpts0[i][1], 0, 1, -1)
+                kp2[i] = cv2.KeyPoint(mkpts1[i][0], mkpts1[i][1], 0, 1, -1)
+
+            return matches, kp1, kp2
         else:
             matches = match_features.main(fname1, fname2, detector, matcher, model=model)
 
@@ -285,6 +330,12 @@ class Node:
 
         if self.detector == 'ORB' or self.detector == 'SIFT' or self.detector == 'SURF':
             return
+        elif self.detector == "loftr" or self.detector == "loftr":
+            default_conf = {
+                'weights': 'outdoor_ds.ckpt',
+                'max_num_matches': 5000,
+            }
+            self.matcher_model = loftr.loftr(default_conf)
         else:
             self.matcher_model = match_features.load_model(self.detector, self.matcher)
             self.detector_model = detect_features.load_model(self.detector)
@@ -512,7 +563,7 @@ class Node:
 
 if __name__ == '__main__':
 
-    data_folder = "/home/jp/Desktop/Rishabh/Handheld/localisation_test_data"
+    data_folder = "/home/cviss3/Desktop/localisation_test_data"
 
     K1 = np.loadtxt(join(data_folder, 'K1.txt'))
 
@@ -535,8 +586,8 @@ if __name__ == '__main__':
         pose1 = poses
 
     #For querying sfm data in a multi resolution map, not required for creating anchors
-    # I2 = cv2.imread(join(data_folder,'HL2','49.jpg'))
-    # K2 = np.loadtxt(join(data_folder,'K2.txt'))
+    I2 = cv2.imread(os.path.join(data_folder, 'rgb', 'query.png'))
+    K2 = K1
     # file = '/home/jp/Desktop/Rishabh/Handheld/localisation_structures_hl2/0_6_less_img_normal/reconstruction_global/sfm_data.json'
     #
     # T_m2_c2_list = utils.return_T_M2_C2(file)
@@ -544,7 +595,7 @@ if __name__ == '__main__':
     # I2 = cv2.imread(join(data_folder, str(query_img_idx) + '.jpg'))
     # K2 = np.loadtxt(join(data_folder, 'K2.txt'))
     # T_m2_c2 = T_m2_c2_list[query_img_idx - 1]
-    # T_m1_c2 = n.callback_query(I2, K2)
+    T_m1_c2 = n.callback_query(I2, K2)
     #
     # T_m1_m2 = T_m1_c2.dot(np.linalg.inv(T_m2_c2))
     # print(T_m1_m2)
