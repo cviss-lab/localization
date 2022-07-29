@@ -588,34 +588,37 @@ if __name__ == '__main__':
     # K2 = np.loadtxt(join(data_folder,'K2.txt'))
     # file = '/home/jp/Desktop/Rishabh/Handheld/localisation_structures_hl2/0_6_less_img_normal/reconstruction_global/sfm_data.json'
 
-    # query_data_folder = '/home/jp/Desktop/Rishabh/Handheld/localisation_structures_hl2'
-    # query_img_dir = join(query_data_folder, 'images')
-    # sfm_file = join(query_data_folder, '0_6_55_img_ultra/reconstruction_global/sfm_data.json')
-    # T_m2_c2_dict = utils.return_T_M2_C2(sfm_file)
-    # # T_m2_c2_array = np.array(T_m2_c2_dict)
-    # q_list = []
-    # t_list = []
-    # for num, filename in enumerate(os.listdir(query_img_dir)):
-    #     query_img_idx = int(os.path.splitext(filename)[0])
-    #     image_path = os.path.join(query_img_dir, filename)
-    #     print(query_img_idx)
-    #     print(image_path)
-    #     I2 = cv2.imread(image_path)
-    #     K2 = np.loadtxt(join(data_folder, 'K2.txt'))
-    #     T_m2_c2 = T_m2_c2_dict[query_img_idx]
-    #     T_m1_c2 = n.callback_query(I2, K2)
-    #     T_m1_m2 = T_m1_c2.dot(np.linalg.inv(T_m2_c2))
-    #     R = Rotation.from_matrix(T_m1_m2[:3, :3])
-    #     q = R.as_quat()
-    #     q_list.append(q)
-    #     t = T_m1_m2[:3, 3].T
-    #     t_list.append(t)
-    #
-    # q_array = np.array(q_list)
-    # np.savetxt("/home/jp/Desktop/Rishabh/Handheld/localisation_structures_ig4/q_array.txt", q_array, delimiter=',')
-    #
-    # t_array = np.array(t_list)
-    # np.savetxt("/home/jp/Desktop/Rishabh/Handheld/localisation_structures_ig4/t_array.txt", t_array, delimiter=',')
+    query_data_folder = '/home/jp/Desktop/Rishabh/Handheld/localisation_structures_hl2'
+    query_img_dir = join(query_data_folder, 'images')
+    sfm_file = join(query_data_folder, '0_6_55_img_ultra/reconstruction_global/sfm_data.json')
+
+    #Todo: Check centers T_M2_C2
+
+    T_m2_c2_dict = utils.return_T_M2_C2(sfm_file)
+    # T_m2_c2_array = np.array(T_m2_c2_dict)
+    q_list = []
+    t_list = []
+    for num, filename in enumerate(os.listdir(query_img_dir)):
+        query_img_idx = int(os.path.splitext(filename)[0])
+        image_path = os.path.join(query_img_dir, filename)
+        print(query_img_idx)
+        print(image_path)
+        I2 = cv2.imread(image_path)
+        K2 = np.loadtxt(join(data_folder, 'K2.txt'))
+        T_m2_c2 = T_m2_c2_dict[query_img_idx]
+        T_m1_c2 = n.callback_query(I2, K2)
+        T_m1_m2 = T_m1_c2.dot(np.linalg.inv(T_m2_c2))
+        R = Rotation.from_matrix(T_m1_m2[:3, :3])
+        q = R.as_quat()
+        q_list.append(q)
+        t = T_m1_m2[:3, 3].T
+        t_list.append(t)
+
+    q_array = np.array(q_list)
+    np.savetxt("/home/jp/Desktop/Rishabh/Handheld/localisation_structures_ig4/loftr_q_array.txt", q_array, delimiter=',')
+
+    t_array = np.array(t_list)
+    np.savetxt("/home/jp/Desktop/Rishabh/Handheld/localisation_structures_ig4/loftr_t_array.txt", t_array, delimiter=',')
     q_array = np.loadtxt("/home/jp/Desktop/Rishabh/Handheld/localisation_structures_ig4/q_array.txt", delimiter=',', usecols=range(4))
     t_array = np.loadtxt("/home/jp/Desktop/Rishabh/Handheld/localisation_structures_ig4/t_array.txt", delimiter=',', usecols=range(3))
     q_avg = np.average(q_array, axis=0)

@@ -2,7 +2,7 @@
 import os
 import shutil
 import cv2
-import cv2.aruco as aruco
+# import cv2.aruco as aruco
 import numpy as np
 # from geometry_msgs.msg import Transform, TransformStamped
 from scipy.spatial.transform import Rotation
@@ -34,11 +34,12 @@ def return_T_M2_C2(sfm_file):
     with open(sfm_file, 'r') as f:
         sfm = json.load(f)
 
-    T_m2_c2_list = []
+    T_m2_c2_dict = {}
     for i in range(len(sfm['views'])):
         # print(sfm['views'])
         rotation = np.array(sfm['extrinsics'][i]['value']['rotation'])
         centers = np.array(sfm['extrinsics'][i]['value']['center'])
+        query_idx = int(sfm['views'][i]['value']['ptr_wrapper']['data']['filename'].replace('.jpg', ''))
         T_m2_c2 = np.eye(4)
         R = rotation.T
         # t = R.dot(-centers).reshape(-1, 1)
@@ -46,8 +47,9 @@ def return_T_M2_C2(sfm_file):
         # Tm2_c2 = np.hstack([R, t])
         T_m2_c2[:3, :3] = R
         T_m2_c2[:3, 3] = C.reshape(-1)
-        T_m2_c2_list.append(T_m2_c2)
-    return T_m2_c2_list
+        T_m2_c2_dict[query_idx] = T_m2_c2
+        # T_m2_c2_list.append(T_m2_c2)
+    return T_m2_c2_dict
 
 def pinhole_model(pose,K):
     """Loads projection and extrensics information for a pinhole camera model
