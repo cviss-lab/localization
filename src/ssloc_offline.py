@@ -15,6 +15,7 @@ sys.path.insert(0, hloc_module)
 from hloc_toolbox import match_features, detect_features, search
 from hloc_toolbox.hloc.matchers import loftr
 
+torch.cuda.empty_cache()
 class Node:
 
     def __init__(self, debug=False, data_folder=None, create_new_anchors=False):
@@ -24,8 +25,8 @@ class Node:
         self.robot_camera_frame_id = None
         self.send_unity_pose = False
         self.frame_rate = 1
-        self.detector = 'loftr'
-        self.matcher = 'loftr'
+        self.detector = 'SuperPoint'
+        self.matcher = 'SuperGlue'
         self.sliding_average_buffer = 1
         self.results_dir = join(data_folder, 'results')
         self.create_new_anchors = create_new_anchors
@@ -160,10 +161,10 @@ class Node:
                 matches = self.feature_matching(des1, des2, self.detector, self.matcher, fname1_local, fname2_local,
                                             model=self.matcher_model, img1=I1, img2=I2)
 
-            img_matches = self.draw_matches_ros(I1, I2, kp1, kp2, matches)
-            img_matches_resize = utils.ResizeWithAspectRatio(img_matches, width=1920)
-            cv2.imshow('img', img_matches_resize)
-            cv2.waitKey(0)
+            # img_matches = self.draw_matches_ros(I1, I2, kp1, kp2, matches)
+            # img_matches_resize = utils.ResizeWithAspectRatio(img_matches, width=1920)
+            # cv2.imshow('img', img_matches_resize)
+            # cv2.waitKey(0)
 
             if len(matches) > len(matches1):
                 matches1 = matches
@@ -594,31 +595,31 @@ if __name__ == '__main__':
 
     #Todo: Check centers T_M2_C2
 
-    T_m2_c2_dict = utils.return_T_M2_C2(sfm_file)
-    # T_m2_c2_array = np.array(T_m2_c2_dict)
-    q_list = []
-    t_list = []
-    for num, filename in enumerate(os.listdir(query_img_dir)):
-        query_img_idx = int(os.path.splitext(filename)[0])
-        image_path = os.path.join(query_img_dir, filename)
-        print(query_img_idx)
-        print(image_path)
-        I2 = cv2.imread(image_path)
-        K2 = np.loadtxt(join(data_folder, 'K2.txt'))
-        T_m2_c2 = T_m2_c2_dict[query_img_idx]
-        T_m1_c2 = n.callback_query(I2, K2)
-        T_m1_m2 = T_m1_c2.dot(np.linalg.inv(T_m2_c2))
-        R = Rotation.from_matrix(T_m1_m2[:3, :3])
-        q = R.as_quat()
-        q_list.append(q)
-        t = T_m1_m2[:3, 3].T
-        t_list.append(t)
-
-    q_array = np.array(q_list)
-    np.savetxt("/home/jp/Desktop/Rishabh/Handheld/localisation_structures_ig4/loftr_q_array.txt", q_array, delimiter=',')
-
-    t_array = np.array(t_list)
-    np.savetxt("/home/jp/Desktop/Rishabh/Handheld/localisation_structures_ig4/loftr_t_array.txt", t_array, delimiter=',')
+    # T_m2_c2_dict = utils.return_T_M2_C2(sfm_file)
+    # # T_m2_c2_array = np.array(T_m2_c2_dict)
+    # q_list = []
+    # t_list = []
+    # for num, filename in enumerate(os.listdir(query_img_dir)):
+    #     query_img_idx = int(os.path.splitext(filename)[0])
+    #     image_path = os.path.join(query_img_dir, filename)
+    #     print(query_img_idx)
+    #     print(image_path)
+    #     I2 = cv2.imread(image_path)
+    #     K2 = np.loadtxt(join(data_folder, 'K2.txt'))
+    #     T_m2_c2 = T_m2_c2_dict[query_img_idx]
+    #     T_m1_c2 = n.callback_query(I2, K2)
+    #     T_m1_m2 = T_m1_c2.dot(np.linalg.inv(T_m2_c2))
+    #     R = Rotation.from_matrix(T_m1_m2[:3, :3])
+    #     q = R.as_quat()
+    #     q_list.append(q)
+    #     t = T_m1_m2[:3, 3].T
+    #     t_list.append(t)
+    #
+    # q_array = np.array(q_list)
+    # np.savetxt("/home/jp/Desktop/Rishabh/Handheld/localisation_structures_ig4/q_array.txt", q_array, delimiter=',')
+    #
+    # t_array = np.array(t_list)
+    # c
     q_array = np.loadtxt("/home/jp/Desktop/Rishabh/Handheld/localisation_structures_ig4/q_array.txt", delimiter=',', usecols=range(4))
     t_array = np.loadtxt("/home/jp/Desktop/Rishabh/Handheld/localisation_structures_ig4/t_array.txt", delimiter=',', usecols=range(3))
     q_avg = np.average(q_array, axis=0)
@@ -628,10 +629,9 @@ if __name__ == '__main__':
     T_m2_c2_avg = np.eye(4)
     T_m2_c2_avg[:3, :3] = R_avg
     T_m2_c2_avg[:3, 3] = t_avg.reshape(-1)
-    for i in range(q_array.shape[0]):
-        Rot = Rotation.from_quat(q_array[i]).as_matrix()
-        R = Rot.T
-        print(R)
+
+    #TODO: read two pointclouds, apply general transformation first, do fast global registration and then local refinement
+
 
     # query_img_idx = 59
     # I2 = cv2.imread(join(data_folder, str(query_img_idx) + '.jpg'))
