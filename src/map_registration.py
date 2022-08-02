@@ -1,7 +1,8 @@
 import open3d as o3d
 import numpy as np
 import copy
-
+from datetime import datetime
+import time
 
 def draw_registration_result_original_color(source, target, transformation):
     source_temp = copy.deepcopy(source)
@@ -26,15 +27,15 @@ trans_init = np.asarray([[0.54186, -0.83509, -0.09491, 3.48543],
 source.transform(trans_init)
 source.estimate_normals()
 target.estimate_normals()
-
-# colored pointcloud registration
-# This is implementation of following paper
-# J. Park, Q.-Y. Zhou, V. Koltun,
+current_transformation = np.identity(4)
+# draw_registration_result_original_color(source, target, current_transformation)
+# draw_registration_result_original_color(source, target)
+# colored pointcloud registration This is implementation of following paper: J. Park, Q.-Y. Zhou, V. Koltun,
 # Colored Point Cloud Registration Revisited, ICCV 2017
 voxel_radius = [0.04, 0.02, 0.01]
 max_iter = [50, 30, 14]
-current_transformation = np.identity(4)
 print("3. Colored point cloud registration")
+start = time.time()
 for scale in range(3):
     iter = max_iter[scale]
     radius = voxel_radius[scale]
@@ -59,11 +60,15 @@ for scale in range(3):
                                                           max_iteration=iter))
     current_transformation = result_icp.transformation
     print(result_icp)
-
+print("Colored ICP took %.3f sec.\n" % (time.time() - start))
+draw_registration_result_original_color(source, target,result_icp.transformation)
 # Saves the 4x4 transform as a txt file
-np.savetxt("/home/jp/Desktop/Rishabh/Handheld/localisation_structures_ig4/T_colored_icp.txt", result_icp.transformation)
-np.savetxt("/home/jp/Desktop/Rishabh/Handheld/localisation_structures_ig4/T_colored_icp_total.txt", np.dot(result_icp.transformation,trans_init))
-draw_registration_result_original_color(source, target,
-                                        result_icp.transformation)
+now = datetime.now()
+dt_string = now.strftime("%d_%m_%Y__%H_%M_%S")
+np.savetxt("/home/jp/Desktop/Rishabh/Handheld/localisation_structures_ig4/T_colored_icp_" + dt_string + ".txt",
+           result_icp.transformation)
+np.savetxt("/home/jp/Desktop/Rishabh/Handheld/localisation_structures_ig4/T_colored_icp_total_" + dt_string + ".txt",
+           np.dot(result_icp.transformation, trans_init))
+
 
 print(result_icp.transformation)
