@@ -62,6 +62,7 @@ for scale in range(3):
 
 # Saves the 4x4 transform as a txt file
 np.savetxt("/home/jp/Desktop/Rishabh/Handheld/localisation_structures_ig4/T_colored_icp.txt", result_icp.transformation)
+np.savetxt("/home/jp/Desktop/Rishabh/Handheld/localisation_structures_ig4/T_colored_icp_total.txt", np.dot(result_icp.transformation,trans_init))
 draw_registration_result_original_color(source, target,
                                         result_icp.transformation)
 
