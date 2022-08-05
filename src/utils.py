@@ -364,5 +364,40 @@ def return_T_M2_C2(sfm_file):
         T_m2_c2[:3, :3] = R
         T_m2_c2[:3, 3] = C.reshape(-1)
         T_m2_c2_dict[query_idx] = T_m2_c2
-        # T_m2_c2_list.append(T_m2_c2)
+
+        # R = rotation.T
+        # t = R.dot(-centers).reshape(-1, 1)
+        # C = centers.reshape((-1, 1))
+        # # Tm2_c2 = np.hstack([R, t])
+        # T_m2_c2[:3, :3] = R
+        # T_m2_c2[:3, 3] = t.reshape(-1)
+        # T_m2_c2_dict[query_idx] = T_m2_c2
     return T_m2_c2_dict
+
+def set_axes_equal(ax):
+    '''Make axes of 3D plot have equal scale so that spheres appear as spheres,
+    cubes as cubes, etc..  This is one possible solution to Matplotlib's
+    ax.set_aspect('equal') and ax.axis('equal') not working for 3D.
+
+    Input
+      ax: a matplotlib axis, e.g., as output from plt.gca().
+    '''
+
+    x_limits = ax.get_xlim3d()
+    y_limits = ax.get_ylim3d()
+    z_limits = ax.get_zlim3d()
+
+    x_range = abs(x_limits[1] - x_limits[0])
+    x_middle = np.mean(x_limits)
+    y_range = abs(y_limits[1] - y_limits[0])
+    y_middle = np.mean(y_limits)
+    z_range = abs(z_limits[1] - z_limits[0])
+    z_middle = np.mean(z_limits)
+
+    # The plot bounding box is a sphere in the sense of the infinity
+    # norm, hence I call half the max range the plot radius.
+    plot_radius = 0.5 * max([x_range, y_range, z_range])
+
+    ax.set_xlim3d([x_middle - plot_radius, x_middle + plot_radius])
+    ax.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
+    ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
