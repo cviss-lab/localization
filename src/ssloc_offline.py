@@ -8,7 +8,11 @@ import utils
 import matplotlib.pyplot as plt
 from scipy.spatial.transform import Rotation
 import torch
+import pickle
+import open3d as o3d
+import copy
 from datetime import datetime
+import time
 
 hloc_module = join(dirname(realpath(__file__)), 'hloc_toolbox')
 sys.path.insert(0, hloc_module)
@@ -562,41 +566,35 @@ class Node:
 
         return np.vstack([x_coord, y_coord])
 
+    def create_offline_anchors(self):
+        image_dir = join(data_folder, 'rgb')
+        num_images = len([name for name in os.listdir(image_dir) if os.path.isfile(os.path.join(image_dir, name))])
+        poses = np.loadtxt(join(data_folder, 'poses.csv'), delimiter=",")
+        K1 = np.loadtxt(join(data_folder, 'K1.txt'))
 
-if __name__ == '__main__':
+        for i in range(num_images):
 
-    data_folder = "/home/jp/Desktop/Rishabh/Handheld/localisation_structures_ig4"
-
-    K1 = np.loadtxt(join(data_folder, 'K1.txt'))
-
-    image_dir = join(data_folder, 'rgb')
-    num1_images = len([name for name in os.listdir(image_dir) if os.path.isfile(os.path.join(image_dir, name))])
-    poses = np.loadtxt(join(data_folder, 'poses.csv'), delimiter=",")
-    n = Node(debug=False, data_folder=data_folder, create_new_anchors=False)
-    query_mode = True
-    localisation_mode = True
-    print("Test")
-    if n.create_new_anchors:
-        for i in range(num1_images):
             I1 = cv2.imread(join(data_folder, 'rgb', str(i + 1) + '.jpg'))
             D1 = cv2.imread(join(data_folder, 'depth', str(i + 1) + '.png'), cv2.IMREAD_UNCHANGED)
             pose1 = poses[i][1:8]
             n.K1 = K1
             n.counter = i
             n.create_anchor(I1, D1, pose1)
-            print(i)
 
 
-    if query_mode:
-        query_data_folder = '/home/jp/Desktop/Rishabh/Handheld/localisation_structures_hl2'
-        query_img_dir = join(query_data_folder, 'images')
-        sfm_file = join(query_data_folder, '0_6_55_img_ultra/reconstruction_global/sfm_data.json')
+def perform_querying(map_folder, image_dir):
+    query_img_dir = join(image_dir, 'images')
+    sfm_file = join(image_dir, 'known_ultra_unblurred/reconstruction_global/sfm_data.json')
+    T_m2_c2_dict = utils.return_T_M2_C2(sfm_file)
 
+    q_list = []
+    t_list = []
+    q_dict = {}
+    t_dict = {}
+    T_m1_c2_dict = {}
 
-        T_m2_c2_dict = utils.return_T_M2_C2(sfm_file)
-        q_list = []
-        t_list = []
-        for num, filename in enumerate(os.listdir(query_img_dir)):
+    for num, filename in enumerate(os.listdir(query_img_dir)):
+        if num < 200:
             query_img_idx = int(os.path.splitext(filename)[0])
             image_path = os.path.join(query_img_dir, filename)
             print(query_img_idx)
@@ -604,36 +602,147 @@ if __name__ == '__main__':
             I2 = cv2.imread(image_path)
             K2 = np.loadtxt(join(data_folder, 'K2.txt'))
             T_m2_c2 = T_m2_c2_dict[query_img_idx]
+
             T_m1_c2 = n.callback_query(I2, K2)
-            T_m1_m2 = T_m1_c2.dot(np.linalg.inv(T_m2_c2))
-            R = Rotation.from_matrix(T_m1_m2[:3, :3])
-            q = R.as_quat()
-            q_list.append(q)
-            t = T_m1_m2[:3, 3].T
-            t_list.append(t)
+            if T_m1_c2 is not None:
+                T_m1_c2_dict[query_img_idx] = T_m1_c2
+                T_m1_m2 = T_m1_c2.dot(np.linalg.inv(T_m2_c2))
+                R = Rotation.from_matrix(T_m1_m2[:3, :3])
+                q = R.as_quat()
+                t = T_m1_m2[:3, 3].T
+                q_dict[query_img_idx] = q
+                t_dict[query_img_idx] = t
+                # q_list.append(q)
+                # t_list.append(t)
 
-        q_array = np.array(q_list)
-        # np.savetxt("/home/jp/Desktop/Rishabh/Handheld/localisation_structures_ig4/q_array.txt", q_array, delimiter=',')
+    with open(join(map_folder, "T_m1_c2_dict.pkl"), 'wb') as f:
+        pickle.dump(T_m1_c2_dict, f)
+    with open(join(map_folder, "q_dict.pkl"), 'wb') as f:
+        pickle.dump(q_dict, f)
+    with open(join(map_folder, "t_dict.pkl"), 'wb') as f:
+        pickle.dump(t_dict, f)
 
-        t_array = np.array(t_list)
-        # np.savetxt("/home/jp/Desktop/Rishabh/Handheld/localisation_structures_ig4/t_array.txt", t_array, delimiter=',')
+    return q_dict, t_dict, T_m1_c2_dict, T_m2_c2_dict
 
 
-    if localisation_mode:
-        # q_array = np.loadtxt("/home/jp/Desktop/Rishabh/Handheld/localisation_structures_ig4/q_array.txt", delimiter=',',
-        #                      usecols=range(4))
-        # t_array = np.loadtxt("/home/jp/Desktop/Rishabh/Handheld/localisation_structures_ig4/t_array.txt", delimiter=',',
-        #                      usecols=range(3))
-        q_avg = np.average(q_array, axis=0)
-        t_avg = np.average(t_array, axis=0)
-        Rot_average = (Rotation.from_quat(q_avg).as_matrix())
-        R_avg = Rot_average
-        T_m1_m2_avg = np.eye(4)
-        T_m1_m2_avg[:3, :3] = R_avg
-        T_m1_m2_avg[:3, 3] = t_avg.reshape(-1)
+def perform_map_localisation(quat, translations):
+    q_array = np.array(list(quat.values()))
+    t_array = np.array(list(translations.values()))
 
-    now = datetime.now()
-    dt_string = now.strftime("%d_%m_%Y__%H_%M_%S")
-    np.savetxt("/home/jp/Desktop/Rishabh/Handheld/localisation_structures_ig4/T_m1_m2"+dt_string+".txt",T_m1_m2_avg)
+    q_avg = np.average(q_array, axis=0)
+    t_avg = np.average(t_array, axis=0)
+    Rot_average = (Rotation.from_quat(q_avg).as_matrix())
+    R_avg = Rot_average
+    T_m1_m2_avg = np.eye(4)
+    T_m1_m2_avg[:3, :3] = R_avg
+    T_m1_m2_avg[:3, 3] = t_avg.reshape(-1)
 
+    return T_m1_m2_avg
+def draw_registration_result_original_color(source, target, transformation):
+    source_temp = copy.deepcopy(source)
+    source_temp.transform(transformation)
+    o3d.visualization.draw_geometries([source_temp, target])
+
+
+
+
+def colored_ICP(src, trgt):
+    # colored pointcloud registration This is implementation of following paper: J. Park, Q.-Y. Zhou, V. Koltun,
+    # Colored Point Cloud Registration Revisited, ICCV 2017
+    voxel_radius = [0.04, 0.02, 0.01]
+    max_iter = [50, 30, 14]
+    print("3. Colored point cloud registration")
+    start = time.time()
+    current_transformation = np.identity(4)
+
+    for scale in range(3):
+        iter = max_iter[scale]
+        radius = voxel_radius[scale]
+        print([iter, radius, scale])
+
+        print("3-1. Downsample with a voxel size %.2f" % radius)
+        src_down = src.voxel_down_sample(radius)
+        trgt_down = trgt.voxel_down_sample(radius)
+
+        print("3-2. Estimate normal.")
+        src_down.estimate_normals(
+            o3d.geometry.KDTreeSearchParamHybrid(radius=radius * 2, max_nn=30))
+        trgt_down.estimate_normals(
+            o3d.geometry.KDTreeSearchParamHybrid(radius=radius * 2, max_nn=30))
+
+        print("3-3. Applying colored point cloud registration")
+        icp_result = o3d.pipelines.registration.registration_colored_icp(
+            src_down, trgt_down, radius, current_transformation,
+            o3d.pipelines.registration.TransformationEstimationForColoredICP(),
+            o3d.pipelines.registration.ICPConvergenceCriteria(relative_fitness=1e-6,
+                                                              relative_rmse=1e-6,
+                                                              max_iteration=iter))
+        current_transformation = icp_result.transformation
+        print(icp_result)
+    print("Colored ICP took %.3f sec.\n" % (time.time() - start))
+    draw_registration_result_original_color(src, trgt, icp_result.transformation)
+    return icp_result
+
+
+if __name__ == '__main__':
+
+    data_folder = "/home/jp/Desktop/Rishabh/Handheld/22-08-08-StructuresLab3dSpalling-processed"
+
+    n = Node(debug=False, data_folder=data_folder, create_new_anchors=False)
+
+    query_mode = False
+    map_localisation_mode = True
+    map_registration_mode = True
+
+    if n.create_new_anchors:
+        n.create_offline_anchors()
+
+    if query_mode:
+        query_data_folder = '/home/jp/Desktop/Rishabh/Handheld/localisation_structures_hl2/08_08_2022'
+
+        q, t, T_m1_c2, T_m2_c2 = perform_querying(data_folder, query_data_folder)
+
+    else:
+
+        with open(join(data_folder, "T_m1_c2_dict.pkl"), 'rb') as f:
+            T_m1_c2 = pickle.load(f)
+        with open(join(data_folder, "q_dict.pkl"), 'rb') as f:
+            q = pickle.load(f)
+        with open(join(data_folder, "t_dict.pkl"), 'rb') as f:
+            t = pickle.load(f)
+
+    if map_localisation_mode:
+        T_m1_m2_avg = perform_map_localisation(q, t)
+        np.savetxt(join(data_folder, "T_m1_m2_avg.txt"), T_m1_m2_avg)
+
+    if map_registration_mode:
+
+        print("1. Load two point clouds and show initial pose")
+
+        # Load the source map (smaller map)
+        source = o3d.io.read_point_cloud(
+            "/home/jp/Desktop/Rishabh/Handheld/localisation_structures_hl2/08_08_2022/90_images/known_ultra/reconstruction_global/Thresh_colorized.ply")
+
+        # Load the target map (larger map)
+        target = o3d.io.read_point_cloud(
+            "/home/jp/Desktop/Rishabh/Handheld/22-08-08-StructuresLab3dSpalling-processed/r3live_output/rgb_pt.pcd")
+        # Add the initial transformation (if available, otherwise Identity matrix)
+
+        trans_init = T_m1_m2_avg
+
+        source.transform(trans_init)
+        source.estimate_normals()
+        target.estimate_normals()
+        # draw_registration_result_original_color(source, target, current_transformation)
+        # draw_registration_result_original_color(source, target)
+
+        result_icp = colored_ICP(source, target)
+        # Saves the 4x4 transform as a txt file
+        now = datetime.now()
+        dt_string = now.strftime("%d_%m_%Y__%H_%M_%S")
+
+        np.savetxt(join(data_folder, "unblurred_T_colored_icp_" + dt_string + ".txt"), result_icp.transformation)
+        np.savetxt(join(data_folder, "unblurred_T_colored_icp_total_" + dt_string + ".txt"), np.dot(result_icp.transformation, trans_init))
+
+        print(result_icp.transformation)
     print("TEST")

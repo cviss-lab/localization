@@ -4,6 +4,7 @@ import copy
 from datetime import datetime
 import time
 
+
 def draw_registration_result_original_color(source, target, transformation):
     source_temp = copy.deepcopy(source)
     source_temp.transform(transformation)
@@ -13,16 +14,23 @@ def draw_registration_result_original_color(source, target, transformation):
 print("1. Load two point clouds and show initial pose")
 
 # Load the source map (smaller map)
+# source = o3d.io.read_point_cloud(
+#     "/home/jp/Desktop/Rishabh/Handheld/localisation_structures_hl2/0_6_55_img_ultra/reconstruction_global/Thresh_colorized.ply")
 source = o3d.io.read_point_cloud(
-    "/home/jp/Desktop/Rishabh/Handheld/localisation_structures_hl2/0_6_55_img_ultra/reconstruction_global/Thresh_colorized.ply")
+    "/home/jp/Desktop/Rishabh/Handheld/localisation_structures_hl2/08_08_2022/90_images/known_ultra/reconstruction_global/Thresh_colorized.ply")
 # Load the target map (larger map)
-target = o3d.io.read_point_cloud("/home/jp/Desktop/Rishabh/Handheld/localisation_test_data/r3live_output/rgb_pt.pcd")
-
-# Add the initial transformation (if available, otherwise Identity matrix
-trans_init = np.asarray([[0.54186, -0.83509, -0.09491, 3.48543],
-                         [0.83752, 0.54595, -0.02213, 1.00575],
-                         [0.07030, -0.06750, 0.99524, 0.32907],
-                         [0.00000, 0.00000, 0.00000, 1.00000]])
+# target = o3d.io.read_point_cloud("/home/jp/Desktop/Rishabh/Handheld/localisation_test_data/r3live_output/rgb_pt.pcd")
+target = o3d.io.read_point_cloud(
+    "/home/jp/Desktop/Rishabh/Handheld/22-08-08-StructuresLab3dSpalling-processed/r3live_output/rgb_pt.pcd")
+# Add the initial transformation (if available, otherwise Identity matrix)
+# trans_init = np.asarray([[0.19270, 0.97667, 0.09482, 8.71700],
+#                          [-0.98056, 0.19530, -0.01882, -6.29700],
+#                          [-0.03690, -0.08935, 0.99532, -0.69601],
+#                          [0.00000, 0.00000, 0.00000, 1.00000]])
+trans_init = ([[0.13050, 0.98648, 0.09916, 9.06382],
+               [-0.99065, 0.13376, -0.02686, -6.53149],
+               [-0.03976, -0.09473, 0.99471, -0.73172],
+               [0.00000, 0.00000, 0.00000, 1.00000]])
 
 source.transform(trans_init)
 source.estimate_normals()
@@ -61,14 +69,20 @@ for scale in range(3):
     current_transformation = result_icp.transformation
     print(result_icp)
 print("Colored ICP took %.3f sec.\n" % (time.time() - start))
-draw_registration_result_original_color(source, target,result_icp.transformation)
+draw_registration_result_original_color(source, target, result_icp.transformation)
 # Saves the 4x4 transform as a txt file
 now = datetime.now()
 dt_string = now.strftime("%d_%m_%Y__%H_%M_%S")
-np.savetxt("/home/jp/Desktop/Rishabh/Handheld/localisation_structures_ig4/T_colored_icp_" + dt_string + ".txt",
-           result_icp.transformation)
-np.savetxt("/home/jp/Desktop/Rishabh/Handheld/localisation_structures_ig4/T_colored_icp_total_" + dt_string + ".txt",
-           np.dot(result_icp.transformation, trans_init))
 
+np.savetxt(
+    "/home/jp/Desktop/Rishabh/Handheld/22-08-08-StructuresLab3dSpalling-processed/unblurred_T_colored_icp_" + dt_string + ".txt",
+    result_icp.transformation)
+np.savetxt(
+    "/home/jp/Desktop/Rishabh/Handheld/22-08-08-StructuresLab3dSpalling-processed/unblurred_T_colored_icp_total_" + dt_string + ".txt",
+    np.dot(result_icp.transformation, trans_init))
+# np.savetxt("/home/jp/Desktop/Rishabh/Handheld/localisation_structures_ig4/T_colored_icp_" + dt_string + ".txt",
+#            result_icp.transformation)
+# np.savetxt("/home/jp/Desktop/Rishabh/Handheld/localisation_structures_ig4/T_colored_icp_total_" + dt_string + ".txt",
+#            np.dot(result_icp.transformation, trans_init))
 
 print(result_icp.transformation)
