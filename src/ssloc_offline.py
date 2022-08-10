@@ -702,16 +702,13 @@ if __name__ == '__main__':
 
         q, t, T_m1_c2, T_m2_c2 = perform_querying(data_folder, query_data_folder)
 
-    else:
-
+    if map_localisation_mode:
         with open(join(data_folder, "T_m1_c2_dict.pkl"), 'rb') as f:
             T_m1_c2 = pickle.load(f)
         with open(join(data_folder, "q_dict.pkl"), 'rb') as f:
             q = pickle.load(f)
         with open(join(data_folder, "t_dict.pkl"), 'rb') as f:
             t = pickle.load(f)
-
-    if map_localisation_mode:
         T_m1_m2_avg = perform_map_localisation(q, t)
         np.savetxt(join(data_folder, "T_m1_m2_avg.txt"), T_m1_m2_avg)
 
