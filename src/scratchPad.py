@@ -5,14 +5,16 @@ import os
 from os.path import join, dirname, realpath
 import cv2
 import utils
-import matplotlib.pyplot as plt
 from scipy.spatial.transform import Rotation
 import torch
+from datetime import datetime
+import matplotlib.pyplot as plt
 import pickle
 import open3d as o3d
 import copy
 from datetime import datetime
 import time
+from operator import itemgetter
 
 hloc_module = join(dirname(realpath(__file__)), 'hloc_toolbox')
 sys.path.insert(0, hloc_module)
@@ -32,8 +34,8 @@ class Node:
         self.robot_camera_frame_id = None
         self.send_unity_pose = False
         self.frame_rate = 1
-        self.detector = 'SuperPoint'
-        self.matcher = 'SuperGlue'
+        self.detector = "SuperPoint"
+        self.matcher = "SuperGlue"
         self.sliding_average_buffer = 1
         self.results_dir = join(data_folder, 'results')
         self.create_new_anchors = create_new_anchors
@@ -136,8 +138,8 @@ class Node:
             if i > 5:
                 break  # terminate loop
 
-            if s < 0.1:
-                continue  # skip the current iteration of the loop
+            # if s < 0.1:  # originally 0.1
+            #     continue  # skip the current iteration of the loop
 
             ret_index = int(p[1].replace('.jpg', ''))
             print('retrieved anchor %i\n' % ret_index)
@@ -212,7 +214,7 @@ class Node:
 
         if pts2D_all.shape[0] < 10:
             print('\nNo anchors found! Try again with another query image..\n')
-            return
+            return np.zeros(16).reshape(4, 4), 0
 
         retval, rvecs, tvecs, inliers = cv2.solvePnPRansac(pts3D_all, pts2D_all, K2, None, flags=cv2.SOLVEPNP_P3P)
 
@@ -243,7 +245,7 @@ class Node:
             T_c2_m1 = utils.Tmatrix_inverse(T_m1_c2)
             self.check_error(I1, I2, D1, pose1, K1, K2, kp1, kp2, matches1, 'interactive', T_c2_m1, inliers)
 
-        return T_m1_c2
+        return T_m1_c2, scores[0]
 
     def send_reloc_pose(self, C, R, query_frame_id, timestamp_query):
         R2 = np.eye(4)
@@ -578,6 +580,7 @@ class Node:
         K1 = np.loadtxt(join(data_folder, 'K1.txt'))
 
         for i in range(num_images):
+            torch.cuda.empty_cache()
             I1 = cv2.imread(join(data_folder, 'rgb', str(i + 1) + '.jpg'))
             D1 = cv2.imread(join(data_folder, 'depth', str(i + 1) + '.png'), cv2.IMREAD_UNCHANGED)
             pose1 = poses[i][1:8]
@@ -596,6 +599,7 @@ def perform_querying(map_folder, image_dir):
     q_dict = {}
     t_dict = {}
     T_m1_c2_dict = {}
+    score_dict = {}
 
     for num, filename in enumerate(os.listdir(query_img_dir)):
         if num < 200:
@@ -607,7 +611,8 @@ def perform_querying(map_folder, image_dir):
             K2 = np.loadtxt(join(data_folder, 'K2.txt'))
             T_m2_c2 = T_m2_c2_dict[query_img_idx]
 
-            T_m1_c2 = n.callback_query(I2, K2)
+            T_m1_c2, score = n.callback_query(I2, K2)
+
             if T_m1_c2 is not None:
                 T_m1_c2_dict[query_img_idx] = T_m1_c2
                 T_m1_m2 = T_m1_c2.dot(np.linalg.inv(T_m2_c2))
@@ -616,17 +621,22 @@ def perform_querying(map_folder, image_dir):
                 t = T_m1_m2[:3, 3].T
                 q_dict[query_img_idx] = q
                 t_dict[query_img_idx] = t
+                score_dict[query_img_idx] = score
                 # q_list.append(q)
                 # t_list.append(t)
 
     with open(join(map_folder, "T_m1_c2_dict.pkl"), 'wb') as f:
         pickle.dump(T_m1_c2_dict, f)
+    with open(join(map_folder, "T_m2_c2_dict.pkl"), 'wb') as f:
+        pickle.dump(T_m2_c2_dict, f)
     with open(join(map_folder, "q_dict.pkl"), 'wb') as f:
         pickle.dump(q_dict, f)
     with open(join(map_folder, "t_dict.pkl"), 'wb') as f:
         pickle.dump(t_dict, f)
+    with open(join(map_folder, "score_dict.pkl"), 'wb') as f:
+        pickle.dump(score_dict, f)
 
-    return q_dict, t_dict, T_m1_c2_dict, T_m2_c2_dict
+    return q_dict, t_dict, T_m1_c2_dict, T_m2_c2_dict, score_dict
 
 
 def perform_map_localisation(quat, translations):
@@ -696,7 +706,7 @@ if __name__ == '__main__':
 
     query_mode = False
     map_localisation_mode = True
-    map_registration_mode = True
+    map_registration_mode = False
 
     if n.create_new_anchors:
         n.create_offline_anchors()
@@ -704,7 +714,7 @@ if __name__ == '__main__':
     if query_mode:
         query_data_folder = '/home/jp/Desktop/Rishabh/Handheld/localisation_structures_hl2/08_08_2022'
 
-        q, t, T_m1_c2, T_m2_c2 = perform_querying(data_folder, query_data_folder)
+        q, t, T_m1_c2, T_m2_c2, scores = perform_querying(data_folder, query_data_folder)
 
     else:
 
@@ -716,10 +726,19 @@ if __name__ == '__main__':
             q = pickle.load(f)
         with open(join(data_folder, "t_dict.pkl"), 'rb') as f:
             t = pickle.load(f)
+        with open(join(data_folder, "score_dict.pkl"), 'rb') as f:
+            scores = pickle.load(f)
+
+    sorted_scores = dict(sorted(scores.items(), key=itemgetter(1)))
+    top_n = 2
+    top_queries = (list(sorted_scores.keys())[-top_n:])
+    dict_filter = lambda x, y: dict([(i, x[i]) for i in x if i in set(y)])
+    q = dict_filter(q, top_queries)
+    t = dict_filter(t, top_queries)
 
     if map_localisation_mode:
         T_m1_m2_avg = perform_map_localisation(q, t)
-        np.savetxt(join(data_folder, "T_m1_m2_avg.txt"), T_m1_m2_avg)
+        np.savetxt(join(data_folder, "T_m1_m2_top_%d_avg.txt"%top_n), T_m1_m2_avg)
 
     if map_registration_mode:
         print("1. Load two point clouds and show initial pose")
@@ -751,4 +770,113 @@ if __name__ == '__main__':
                    np.dot(result_icp.transformation, trans_init))
 
         print(result_icp.transformation)
-    print("TEST")
+
+
+    sorted_T_m1_c2_dict = dict(sorted(T_m1_c2.items(), key=itemgetter(0)))
+    sorted_T_m2_c2_dict = dict(sorted(T_m2_c2.items(), key=itemgetter(0)))
+
+    # sorted_scored = dict(sorted(score_dict.items(), key=itemgetter(1)))
+    # top_retrievals = list(dict(sorted(score_dict.items(), key=itemgetter(1))).keys())[-1], \
+    #                  list(dict(sorted(score_dict.items(), key=itemgetter(1))).keys())[-2]
+
+    # q_array = np.vstack((q_dict[top_retrievals[0]], q_dict[top_retrievals[1]]))
+    # t_array = np.vstack((t_dict[top_retrievals[0]], t_dict[top_retrievals[1]]))
+    # q_avg = np.average(q_array, axis=0)
+    # t_avg = np.average(t_array, axis=0)
+    # Rot_average = (Rotation.from_quat(q_avg).as_matrix())
+    # R_avg = Rot_average
+    # T_m1_m2_avg = np.eye(4)
+    # T_m1_m2_avg[:3, :3] = R_avg
+    # T_m1_m2_avg[:3, 3] = t_avg.reshape(-1)
+    # np.savetxt("/home/jp/Desktop/Rishabh/Handheld/localisation_structures_ig4/optimised_T_m1_m2.txt",
+    #            T_m1_m2_avg)
+    #
+    # centers_m1 = []
+    # centers_m2 = []
+    # C_m1 = np.vstack(((sorted_T_m1_c2_dict[top_retrievals[0]][:3, 3]).reshape(-1, 1),(sorted_T_m1_c2_dict[top_retrievals[1]][:3, 3]).reshape(-1, 1)))
+    # C_m2 =  np.vstack(((sorted_T_m2_c2_dict[top_retrievals[0]][:3, 3]).reshape(-1, 1),(sorted_T_m2_c2_dict[top_retrievals[1]][:3, 3]).reshape(-1, 1)))
+    # centers_m1.append(C_m1)
+    # centers_m2.append(C_m2)
+    #
+    # pts1 = np.array(centers_m1).reshape(-1, 3)
+    # pts2 = np.array(centers_m2).reshape(-1, 3)
+    # dist1 = np.linalg.norm(pts1 - pts1[:, None], axis=-1)
+    # dist2 = np.linalg.norm(pts2 - pts2[:, None], axis=-1)
+    #
+    # scale = np.divide(dist1, dist2)
+    top_T_m1_c2_dict = dict_filter(sorted_T_m1_c2_dict, top_queries)
+    top_T_m2_c2_dict = dict_filter(sorted_T_m2_c2_dict, top_queries)
+    centers_m1 = []
+    centers_m2 = []
+    # for query in sorted_T_m1_c2_dict:
+    for query in top_T_m1_c2_dict:
+        # C_m1 = (sorted_T_m1_c2_dict[query][:3, 3]).reshape(-1, 1)
+        # C_m2 = (sorted_T_m2_c2_dict[query][:3, 3]).reshape(-1, 1)
+        C_m1 = (top_T_m1_c2_dict[query][:3, 3]).reshape(-1, 1)
+        C_m2 = (top_T_m2_c2_dict[query][:3, 3]).reshape(-1, 1)
+        centers_m1.append(C_m1)
+        centers_m2.append(C_m2)
+
+    pts1 = np.array(centers_m1).reshape(-1, 3)
+    pts2 = np.array(centers_m2).reshape(-1, 3)
+
+    x1 = pts1[:, 0]
+    y1 = pts1[:, 1]
+    z1 = pts1[:, 2]
+    x2 = pts2[:, 0]
+    y2 = pts2[:, 1]
+    z2 = pts2[:, 2]
+    # Create Figure
+    fig = plt.figure(figsize=(10, 7))
+    ax = plt.axes(projection="3d")
+    ax.scatter3D(x1, y1, z1, marker='o', s=20, label='m1')
+    ax.scatter3D(x2, y2, z2, marker='o', s=20, label='m2')
+    utils.set_axes_equal(ax)
+    ax.legend(loc=1)
+    plt.show()
+    dist1 = np.linalg.norm(pts1 - pts1[:, None], axis=-1)
+    dist2 = np.linalg.norm(pts2 - pts2[:, None], axis=-1)
+
+    scale = np.divide(dist1, dist2)
+    valid_scale = scale[~np.isnan(scale)]
+    top_scale = scale[0,1]
+    #
+    # now = datetime.now()
+    # dt_string = now.strftime("%d_%m_%Y__%H_%M_%S")
+    # np.savetxt("/home/jp/Desktop/Rishabh/Handheld/localisation_structures_ig4/T_m1_m2_" + dt_string + ".txt",
+    #            T_m1_m2_avg)
+    print(T_m1_m2_avg)
+    pts2_transformed = T_m1_m2_avg.dot(np.hstack((pts2, np.ones(top_n).reshape(top_n, 1))).T).T[:, :3]
+    x1 = pts1[:, 0]
+    y1 = pts1[:, 1]
+    z1 = pts1[:, 2]
+    x2 = pts2_transformed[:, 0]
+    y2 = pts2_transformed[:, 1]
+    z2 = pts2_transformed[:, 2]
+    # Create Figure
+    fig = plt.figure(figsize=(10, 7))
+    ax = plt.axes(projection="3d")
+    ax.scatter3D(x1, y1, z1, marker='o', s=20, label='m1')
+    ax.scatter3D(x2, y2, z2, marker='o', s=20, label='m2')
+    utils.set_axes_equal(ax)
+    ax.legend(loc=1)
+    plt.show()
+
+    fig = plt.figure(figsize=(10, 7))
+    ax = plt.axes(projection="3d")
+
+    # p_i = np.vstack((pts1[0, :], pts2_transformed[0, :]))
+    # x_i = p_i[:, 0]
+    # y_i = p_i[:, 1]
+    # z_i = p_i[:, 2]
+    # ax.scatter3D(x_i, y_i, z_i, marker='o', s=20)
+    # p_i = np.vstack((pts1[5, :], pts2_transformed[5, :]))
+    # x_i = p_i[:, 0]
+    # y_i = p_i[:, 1]
+    # z_i = p_i[:, 2]
+    # ax.scatter3D(x_i, y_i, z_i, marker='o', s=20)
+    #
+    # utils.set_axes_equal(ax)
+    # plt.show()
+
+    print("Test")
