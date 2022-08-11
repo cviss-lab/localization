@@ -1,4 +1,5 @@
 #!/usr/bin/env python3  
+import scipy
 import rospy
 import numpy as np
 import sys
@@ -344,6 +345,7 @@ class Node:
                 self.check_error(I1,I2,D1,pose1,K1,K2,kp1,kp2,matches1,'interactive',T_c2_m1,inliers)
         except Exception as e:
             print(e)
+
 
     def load_anchor(kp1, D1, K1, pose1):
         pts1 = np.float32([ kp.pt for kp in kp1 ])

@@ -10,7 +10,7 @@ import time
 import cv2
 from scipy.optimize import least_squares
 from scipy.spatial.transform import Rotation
-from extrinsic2pyramid.util.camera_pose_visualizer import CameraPoseVisualizer
+from extrinsic2pyramid import CameraPoseVisualizer
 
 class BundleAdjustment():
     def __init__(self,camera_params=None,n_cameras=None, n_points=None, camera_indices=None, point_indices=None, points_2d=None, points_3d=None):
@@ -151,8 +151,7 @@ class BundleAdjustment2():
         #     self.k_cam_params = 0
 
 
-    def init_viz(self):
-        xp,yp,zp = np.mean(self.points_3d,axis=0)
+    def init_viz(self,xp,yp,zp):
         self.visualizer = CameraPoseVisualizer([xp-5, xp+5], [yp-5, yp+5], [zp-2, zp+8])
 
     def add_viz(self,color):
@@ -187,7 +186,7 @@ class BundleAdjustment2():
             T[:3,3] = -Rot.T.dot(tvecs)
 
             self.visualizer.extrinsic2pyramid(T, color, 1)
-            self.visualizer.plot_points(self.points_3d,color)
+            # self.visualizer.plot_points(self.points_3d,color)
 
     def read_from_data(self,pts3D,pts_idx,pts2D_l,tvecs_l,rvecs_l,K,dist=[0,0,0,0]):
         self.points_2d = np.vstack(pts2D_l)
