@@ -214,7 +214,7 @@ class Node:
 
         if pts2D_all.shape[0] < 10:
             print('\nNo anchors found! Try again with another query image..\n')
-            return np.zeros(16).reshape(4, 4), 0
+            return np.zeros((4,4)), 0
 
         retval, rvecs, tvecs, inliers = cv2.solvePnPRansac(pts3D_all, pts2D_all, K2, None, flags=cv2.SOLVEPNP_P3P)
 
@@ -589,9 +589,11 @@ class Node:
             n.create_anchor(I1, D1, pose1)
 
 
-def perform_querying(map_folder, image_dir):
-    query_img_dir = join(image_dir, 'images')
-    sfm_file = join(image_dir, 'known_ultra_unblurred/reconstruction_global/sfm_data.json')
+def perform_querying(map_folder, query_folder):
+    query_img_dir = join(query_folder, 'images')
+    # sfm_file = join(query_folder, 'known_ultra_unblurred/reconstruction_global/sfm_data.json')
+    sfm_file = join(query_folder, 'unknown_ultra_unblurred/reconstruction_global/sfm_data.json')
+
     T_m2_c2_dict = utils.return_T_M2_C2(sfm_file)
 
     q_list = []
@@ -625,23 +627,115 @@ def perform_querying(map_folder, image_dir):
                 # q_list.append(q)
                 # t_list.append(t)
 
-    with open(join(map_folder, "T_m1_c2_dict.pkl"), 'wb') as f:
+    with open(join(query_folder, "T_m1_c2_dict.pkl"), 'wb') as f:
         pickle.dump(T_m1_c2_dict, f)
-    with open(join(map_folder, "T_m2_c2_dict.pkl"), 'wb') as f:
+    with open(join(query_folder, "T_m2_c2_dict.pkl"), 'wb') as f:
         pickle.dump(T_m2_c2_dict, f)
-    with open(join(map_folder, "q_dict.pkl"), 'wb') as f:
-        pickle.dump(q_dict, f)
-    with open(join(map_folder, "t_dict.pkl"), 'wb') as f:
-        pickle.dump(t_dict, f)
-    with open(join(map_folder, "score_dict.pkl"), 'wb') as f:
+    # with open(join(query_folder, "q_dict.pkl"), 'wb') as f:
+    #     pickle.dump(q_dict, f)
+    # with open(join(query_folder, "t_dict.pkl"), 'wb') as f:
+    #     pickle.dump(t_dict, f)
+    with open(join(query_folder, "score_dict.pkl"), 'wb') as f:
         pickle.dump(score_dict, f)
 
-    return q_dict, t_dict, T_m1_c2_dict, T_m2_c2_dict, score_dict
+    # return q_dict, t_dict, T_m1_c2_dict, T_m2_c2_dict, score_dict
+    return T_m1_c2_dict, T_m2_c2_dict, score_dict
+
+def perform_scaling(t_m1_c2, t_m2_c2,best_queries):
+    dict_filter = lambda x, y: dict([(i, x[i]) for i in x if i in set(y)])
+
+    top_t_m1_c2_dict = dict_filter(t_m1_c2, best_queries)
+    top_t_m2_c2_dict = dict_filter(t_m2_c2, best_queries)
+    centers_m1 = []
+    centers_m2 = []
+    # for query in sorted_t_m1_c2_dict:
+    for query in top_t_m1_c2_dict:
+        C_m1 = (top_t_m1_c2_dict[query][:3, 3]).reshape(-1, 1)
+        C_m2 = (top_t_m2_c2_dict[query][:3, 3]).reshape(-1, 1)
+        centers_m1.append(C_m1)
+        centers_m2.append(C_m2)
+
+    pts1 = np.array(centers_m1).reshape(-1, 3)
+    pts2 = np.array(centers_m2).reshape(-1, 3)
+
+    x1 = pts1[:, 0]
+    y1 = pts1[:, 1]
+    z1 = pts1[:, 2]
+    x2 = pts2[:, 0]
+    y2 = pts2[:, 1]
+    z2 = pts2[:, 2]
+    # Create Figure
+    fig = plt.figure(figsize=(10, 7))
+    ax = plt.axes(projection="3d")
+    ax.scatter3D(x1, y1, z1, marker='o', s=20, label='m1')
+    ax.scatter3D(x2, y2, z2, marker='o', s=20, label='m2')
+    utils.set_axes_equal(ax)
+    ax.legend(loc=1)
+    plt.show()
+    dist1 = np.linalg.norm(pts1 - pts1[:, None], axis=-1)
+    dist2 = np.linalg.norm(pts2 - pts2[:, None], axis=-1)
+
+    scale = np.divide(dist1, dist2)
+    top_scale = scale[0, 1]
+
+    scaled_t_m2_c2_dict = t_m2_c2.copy()
+    scaled_centers = {}
+    for query in scaled_t_m2_c2_dict:
+        print(t_m2_c2[query])
+
+        scaled_centers = t_m2_c2[query][:3, 3] * top_scale
+        scaled_t_m2_c2_dict[query][:3, 3] = scaled_centers
+        # if query == 99:
+
+        print(scaled_t_m2_c2_dict[query])
+    print(t_m2_c2[query])
+    print(scaled_t_m2_c2_dict[query])
+    return scaled_t_m2_c2_dict, top_scale
 
 
-def perform_map_localisation(quat, translations):
-    q_array = np.array(list(quat.values()))
-    t_array = np.array(list(translations.values()))
+# def perform_map_localisation(quat, translations):
+#     q_array = np.array(list(quat.values()))
+#     t_array = np.array(list(translations.values()))
+#
+#     q_avg = np.average(q_array, axis=0)
+#     t_avg = np.average(t_array, axis=0)
+#     Rot_average = (Rotation.from_quat(q_avg).as_matrix())
+#     R_avg = Rot_average
+#     T_m1_m2_avg = np.eye(4)
+#     T_m1_m2_avg[:3, :3] = R_avg
+#     T_m1_m2_avg[:3, 3] = t_avg.reshape(-1)
+#
+#     return T_m1_m2_avg
+
+def perform_map_localisation(t_m1_c2, t_m2_c2, query_folder, queries):
+    query_img_dir = join(query_folder, 'images')
+    q_dict = {}
+    t_dict = {}
+    for query in queries:
+        join(query_img_dir,str(181)+".jpg")
+        T_m1_c2 = t_m1_c2[query]
+        T_m2_c2 = t_m2_c2[query]
+        T_m1_m2 = T_m1_c2.dot(np.linalg.inv(T_m2_c2))
+        R = Rotation.from_matrix(T_m1_m2[:3, :3])
+        q = R.as_quat()
+        t = T_m1_m2[:3, 3].T
+        q_dict[query] = q
+        t_dict[query] = t
+    # for num, filename in enumerate(os.listdir(query_img_dir)):
+    #     if query in queries:
+    #         query_img_idx = int(os.path.splitext(filename)[0])
+    #         # if T_m1_c2 is not None:
+    #         T_m1_c2 = t_m1_c2[query_img_idx]
+    #         T_m2_c2 = t_m2_c2[query_img_idx]
+    #         T_m1_m2 = T_m1_c2.dot(np.linalg.inv(T_m2_c2))
+    #         R = Rotation.from_matrix(T_m1_m2[:3, :3])
+    #         q = R.as_quat()
+    #         t = T_m1_m2[:3, 3].T
+    #         q_dict[query_img_idx] = q
+    #         t_dict[query_img_idx] = t
+
+    q_array = np.array(list(q_dict.values()))
+    t_array  = np.array(list(t_dict.values()))
 
     q_avg = np.average(q_array, axis=0)
     t_avg = np.average(t_array, axis=0)
@@ -653,11 +747,22 @@ def perform_map_localisation(quat, translations):
 
     return T_m1_m2_avg
 
-
 def draw_registration_result_original_color(source, target, transformation):
     source_temp = copy.deepcopy(source)
     source_temp.transform(transformation)
     o3d.visualization.draw_geometries([source_temp, target])
+
+def draw_registration_result(source, target, transformation):
+    source_temp = copy.deepcopy(source)
+    target_temp = copy.deepcopy(target)
+    source_temp.paint_uniform_color([1, 0.706, 0])
+    target_temp.paint_uniform_color([0, 0.651, 0.929])
+    source_temp.transform(transformation)
+    o3d.visualization.draw_geometries([source_temp, target_temp],
+                                      zoom=0.4459,
+                                      front=[0.9288, -0.2951, -0.2242],
+                                      lookat=[1.6784, 2.0612, 1.4451],
+                                      up=[-0.3402, -0.9189, -0.1996])
 
 
 def colored_ICP(src, trgt):
@@ -701,65 +806,77 @@ def colored_ICP(src, trgt):
 if __name__ == '__main__':
 
     data_folder = "/home/jp/Desktop/Rishabh/Handheld/22-08-08-StructuresLab3dSpalling-processed"
+    query_data_folder = '/home/jp/Desktop/Rishabh/Handheld/localisation_structures_hl2/08_08_2022'
 
-    n = Node(debug=False, data_folder=data_folder, create_new_anchors=False)
-
+    # n = Node(debug=False, data_folder=data_folder, create_new_anchors=False)
+    #
     query_mode = False
     map_localisation_mode = True
     map_registration_mode = False
+    icp_test = True
 
-    if n.create_new_anchors:
-        n.create_offline_anchors()
+    scaling = True
+    # if n.create_new_anchors:
+    #     n.create_offline_anchors()
 
     if query_mode:
-        query_data_folder = '/home/jp/Desktop/Rishabh/Handheld/localisation_structures_hl2/08_08_2022'
-
-        q, t, T_m1_c2, T_m2_c2, scores = perform_querying(data_folder, query_data_folder)
-
+        T_m1_c2, T_m2_c2, scores = perform_querying(data_folder, query_data_folder)
     else:
-
-        with open(join(data_folder, "T_m1_c2_dict.pkl"), 'rb') as f:
+        with open(join(query_data_folder, "T_m1_c2_dict.pkl"), 'rb') as f:
             T_m1_c2 = pickle.load(f)
-        with open(join(data_folder, "T_m2_c2_dict.pkl"), 'rb') as f:
+        with open(join(query_data_folder, "T_m2_c2_dict.pkl"), 'rb') as f:
             T_m2_c2 = pickle.load(f)
-        with open(join(data_folder, "q_dict.pkl"), 'rb') as f:
-            q = pickle.load(f)
-        with open(join(data_folder, "t_dict.pkl"), 'rb') as f:
-            t = pickle.load(f)
-        with open(join(data_folder, "score_dict.pkl"), 'rb') as f:
+        with open(join(query_data_folder, "score_dict.pkl"), 'rb') as f:
             scores = pickle.load(f)
 
     sorted_scores = dict(sorted(scores.items(), key=itemgetter(1)))
-    top_n = 2
+    top_n = 10
     top_queries = (list(sorted_scores.keys())[-top_n:])
+
+    if scaling:
+        T_m2_c2_dict, scale_num = perform_scaling(T_m1_c2, T_m2_c2, top_queries)
+
+
+    sorted_T_m1_c2_dict = dict(sorted(T_m1_c2.items(), key=itemgetter(0)))
+    sorted_T_m2_c2_dict = dict(sorted(T_m2_c2.items(), key=itemgetter(0)))
+
     dict_filter = lambda x, y: dict([(i, x[i]) for i in x if i in set(y)])
-    q = dict_filter(q, top_queries)
-    t = dict_filter(t, top_queries)
+
+    top_t_m1_c2_dict = dict_filter(sorted_T_m1_c2_dict, top_queries)
+    top_t_m2_c2_dict = dict_filter(sorted_T_m2_c2_dict, top_queries)
+
 
     if map_localisation_mode:
-        T_m1_m2_avg = perform_map_localisation(q, t)
-        np.savetxt(join(data_folder, "T_m1_m2_top_%d_avg.txt"%top_n), T_m1_m2_avg)
+        # T_m1_m2_avg = perform_map_localisation(q, t)
+        T_m1_m2_avg = perform_map_localisation(top_t_m1_c2_dict, top_t_m2_c2_dict,query_data_folder, top_queries)
+
+        np.savetxt(join(query_data_folder, "T_m1_m2_top_%d_avg.txt" % top_n), T_m1_m2_avg)
+        # np.savetxt(join(query_data_folder, "T_m1_m2_top_avg.txt"), T_m1_m2_avg)
+
 
     if map_registration_mode:
         print("1. Load two point clouds and show initial pose")
 
         # Load the source map (smaller map)
         source = o3d.io.read_point_cloud(
-            "/home/jp/Desktop/Rishabh/Handheld/localisation_structures_hl2/08_08_2022/90_images/known_ultra/reconstruction_global/Thresh_colorized.ply")
+            "/home/jp/Desktop/Rishabh/Handheld/localisation_structures_hl2/08_08_2022/unknown_ultra_unblurred/reconstruction_global/scaled_transformed_MVG_colorized.ply")
 
         # Load the target map (larger map)
         target = o3d.io.read_point_cloud(
             "/home/jp/Desktop/Rishabh/Handheld/22-08-08-StructuresLab3dSpalling-processed/r3live_output/rgb_pt.pcd")
         # Add the initial transformation (if available, otherwise Identity matrix)
 
-        trans_init = T_m1_m2_avg
+        # scaled_source = source.scale(scale_num, source.get_center())
+
+        # trans_init = T_m1_m2_avg
+        trans_init = np.eye(4)
 
         source.transform(trans_init)
         source.estimate_normals()
         target.estimate_normals()
         # draw_registration_result_original_color(source, target, current_transformation)
         # draw_registration_result_original_color(source, target)
-
+        draw_registration_result_original_color(source, target, np.eye(4))
         result_icp = colored_ICP(source, target)
         # Saves the 4x4 transform as a txt file
         now = datetime.now()
@@ -772,8 +889,36 @@ if __name__ == '__main__':
         print(result_icp.transformation)
 
 
-    sorted_T_m1_c2_dict = dict(sorted(T_m1_c2.items(), key=itemgetter(0)))
-    sorted_T_m2_c2_dict = dict(sorted(T_m2_c2.items(), key=itemgetter(0)))
+    if icp_test:
+        threshold = 1
+        # Load the source map (smaller map)
+        source = o3d.io.read_point_cloud(
+            "/home/jp/Desktop/Rishabh/Handheld/localisation_structures_hl2/08_08_2022/conference_outputs/scaled_transformed_MVG_colorized.ply")
+
+        # Load the target map (larger map)
+        target = o3d.io.read_point_cloud(
+            "/home/jp/Desktop/Rishabh/Handheld/22-08-08-StructuresLab3dSpalling-processed/r3live_output/rgb_pt.pcd")
+        # Add the initial transformation (if available, otherwise Identity matrix)
+
+        trans_init = np.eye(4)
+
+        print("Initial alignment")
+        evaluation = o3d.pipelines.registration.evaluate_registration(
+            source, target, threshold, trans_init)
+        print(evaluation)
+        print("Apply point-to-point ICP")
+        reg_p2p = o3d.pipelines.registration.registration_icp(
+            source, target, threshold, trans_init,
+            o3d.pipelines.registration.TransformationEstimationPointToPoint())
+        print(reg_p2p)
+        print("Transformation is:")
+        print(reg_p2p.transformation)
+        draw_registration_result_original_color(source, target, reg_p2p.transformation)
+
+        now = datetime.now()
+        # dt_string = now.strftime("%d_%m_%Y__%H_%M_%S")
+        # np.savetxt(join("/home/jp/Desktop/Rishabh/Handheld/localisation_structures_hl2/08_08_2022",
+        #                 "conference_icp_Transform" + dt_string + ".txt"), reg_p2p.transformation)
 
     # sorted_scored = dict(sorted(score_dict.items(), key=itemgetter(1)))
     # top_retrievals = list(dict(sorted(score_dict.items(), key=itemgetter(1))).keys())[-1], \
@@ -804,42 +949,7 @@ if __name__ == '__main__':
     # dist2 = np.linalg.norm(pts2 - pts2[:, None], axis=-1)
     #
     # scale = np.divide(dist1, dist2)
-    top_T_m1_c2_dict = dict_filter(sorted_T_m1_c2_dict, top_queries)
-    top_T_m2_c2_dict = dict_filter(sorted_T_m2_c2_dict, top_queries)
-    centers_m1 = []
-    centers_m2 = []
-    # for query in sorted_T_m1_c2_dict:
-    for query in top_T_m1_c2_dict:
-        # C_m1 = (sorted_T_m1_c2_dict[query][:3, 3]).reshape(-1, 1)
-        # C_m2 = (sorted_T_m2_c2_dict[query][:3, 3]).reshape(-1, 1)
-        C_m1 = (top_T_m1_c2_dict[query][:3, 3]).reshape(-1, 1)
-        C_m2 = (top_T_m2_c2_dict[query][:3, 3]).reshape(-1, 1)
-        centers_m1.append(C_m1)
-        centers_m2.append(C_m2)
 
-    pts1 = np.array(centers_m1).reshape(-1, 3)
-    pts2 = np.array(centers_m2).reshape(-1, 3)
-
-    x1 = pts1[:, 0]
-    y1 = pts1[:, 1]
-    z1 = pts1[:, 2]
-    x2 = pts2[:, 0]
-    y2 = pts2[:, 1]
-    z2 = pts2[:, 2]
-    # Create Figure
-    fig = plt.figure(figsize=(10, 7))
-    ax = plt.axes(projection="3d")
-    ax.scatter3D(x1, y1, z1, marker='o', s=20, label='m1')
-    ax.scatter3D(x2, y2, z2, marker='o', s=20, label='m2')
-    utils.set_axes_equal(ax)
-    ax.legend(loc=1)
-    plt.show()
-    dist1 = np.linalg.norm(pts1 - pts1[:, None], axis=-1)
-    dist2 = np.linalg.norm(pts2 - pts2[:, None], axis=-1)
-
-    scale = np.divide(dist1, dist2)
-    valid_scale = scale[~np.isnan(scale)]
-    top_scale = scale[0,1]
     #
     # now = datetime.now()
     # dt_string = now.strftime("%d_%m_%Y__%H_%M_%S")
