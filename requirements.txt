@@ -1,16 +1,9 @@
 # TODO: Update with exact module version
 numpy
 opencv-python
-opencv-contrib-python
-numpy-stl
-python-csv
 torch>=1.1
 torchvision>=0.3
-numpy
-tqdm>=4.36.0
+tqdm
 matplotlib
-plotly
 scipy
 h5py
-kornia
-gdown
