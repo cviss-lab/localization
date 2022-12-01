@@ -25,23 +25,24 @@ from hloc_toolbox.hloc.matchers import loftr
 torch.cuda.empty_cache()
 
 
-class Node:
+class ssloc:
 
-    def __init__(self, debug=False, data_folder=None, create_new_anchors=False, detector='SuperPoint', matcher='SuperGlue'):
+    def __init__(self, data_folder=None, results_dir=None, create_new_anchors=False, detector='loftr', matcher='loftr', retrieval='netvlad'):
 
-        self.debug = debug
         self.map_frame_id = None
         self.robot_camera_frame_id = None
         self.send_unity_pose = False
         self.frame_rate = 1
         self.detector = detector
         self.matcher = matcher
-        self.max_retrieved_anchors = 5
-        self.similarity_threshold = 0.1
-        self.sliding_average_buffer = 1
-        self.results_dir = join(data_folder, 'anchors')
+        self.retrieval = retrieval
         self.data_folder = data_folder
         self.create_new_anchors = create_new_anchors
+
+        if results_dir is None:
+            self.results_dir = join(data_folder, 'anchors')
+        else:
+            self.results_dir = results_dir
 
         self.K1 = None
         self.currently_running = False
@@ -61,22 +62,10 @@ class Node:
         utils.make_dir(join(self.results_dir, 'depth'))
         utils.make_dir(join(self.results_dir, 'poses'))
 
-    def create_anchor(self, *args):
+    def create_anchor(self, I1, D1, K1, pose1):
         try:
-            if self.K1 is None:
-                return
-
-            # if self.currently_running:
-            #     return
-            # else:
-            #     self.currently_running = True
 
             print('creating new anchor...')
-
-            I1 = args[0]
-            K1 = self.K1
-            D1 = args[1]
-            pose1 = args[2]
 
             # detect local features
             fname1 = join(self.results_dir, 'local_features', 'local_%i.h5' % self.counter)
@@ -84,7 +73,7 @@ class Node:
 
             # detect global features
             fname1 = join(self.results_dir, 'global_features', 'global_%i.h5' % self.counter)
-            self.feature_detection(I1, 'netvlad', fname1, model=self.retrieval_model, id='%i.jpg' % self.counter)
+            self.feature_detection(I1, self.retrieval, fname1, model=self.retrieval_model, id='%i.jpg' % self.counter)
 
             # save rgb image
             fname_rgb1 = join(self.results_dir, 'rgb', 'rgb_%i.png' % self.counter)
@@ -112,7 +101,7 @@ class Node:
             print(e)
             return
 
-    def callback_query(self, I2, K2, max_reproj_error=None,fov=None):
+    def callback_query(self, I2, K2, max_reproj_error=None, fov=None, retrieved_anchors=5, similarity_threshold=0.1):
 
         if max_reproj_error is None:
             max_reproj_error = 8
@@ -130,9 +119,9 @@ class Node:
         print('Retrieving similar anchors...')
         fdir_db = join(self.results_dir, 'global_features')
         fname2_global = join(self.results_dir, 'global_q.h5')
-        self.feature_detection(I2, 'netvlad', fname2_global, model=self.retrieval_model, id='q.jpg')
+        self.feature_detection(I2, self.retrieval, fname2_global, model=self.retrieval_model, id='q.jpg')
 
-        pairs, scores = search.main(fname2_global, fdir_db, num_matches=self.max_retrieved_anchors)
+        pairs, scores = search.main(fname2_global, fdir_db, num_matches=retrieved_anchors)
 
         print('\nsimilarity score between anchor and query: %.4f' % scores[0])
         pts2D_all = np.array([]).reshape(0, 2)
@@ -143,10 +132,10 @@ class Node:
 
         for i, (p, s) in enumerate(zip(pairs, scores)):
 
-            if i > self.max_retrieved_anchors:
+            if i > retrieved_anchors:
                 break  # terminate loop
 
-            if s < self.similarity_threshold:
+            if s < similarity_threshold:
                 continue  # skip the current iteration of the loop
 
             ret_index = int(p[1].replace('.jpg', ''))
@@ -230,11 +219,14 @@ class Node:
         T_m1_c2[:3, 3] = C.reshape(-1)
 
         num_inliers = len(inliers)
+        print('\nInliers in View 1: {:d}' .format(num_inliers))
 
         return T_m1_c2, num_inliers
 
     def callback_query_multiple(self, Ip=None, fov=90, I2_l=None, T2_l=None, K2=None, 
-                                optimization=True, max_reproj_error=10, one_view=None):
+                                optimization=True, max_reproj_error=10, one_view=None,
+                                retrieved_anchors=5, similarity_threshold=0.1,
+                                second_inlier_ratio=0.15):
         
         if Ip is not None:
             print('query panorama image recieved!')
@@ -278,19 +270,19 @@ class Node:
             print('Retrieving similar anchors...')
             fdir_db = join(self.results_dir,'global_features')
             fname2_global = join(self.results_dir,'global_q.h5')
-            self.feature_detection(I2, 'netvlad', fname2_global, model=self.retrieval_model, id='q.jpg')
+            self.feature_detection(I2, self.retrieval, fname2_global, model=self.retrieval_model, id='q.jpg')
 
-            pairs,scores = search.main(fname2_global,fdir_db,num_matches=self.max_retrieved_anchors)
+            pairs,scores = search.main(fname2_global,fdir_db,num_matches=retrieved_anchors)
             
             matches1 = []
             ret_index1 = None
 
             for i,(p,s) in enumerate(zip(pairs,scores)):
 
-                if i > self.max_retrieved_anchors:
+                if i > retrieved_anchors:
                     break
 
-                if s < self.similarity_threshold:
+                if s < similarity_threshold:
                     continue
 
                 ret_index = int(p[1].replace('.jpg',''))
@@ -381,7 +373,7 @@ class Node:
                 T_m1_m2,tvecs_l,rvecs_l,best_inlier_idxs=utils.multiviewSolvePnPRansac(pts3D_all, pts2D_all, query_poses_l, K2, max_reproj_error=max_reproj_error) 
                 
                 len_best_inlier_idxs = sorted([len(inliers) for inliers in best_inlier_idxs], reverse=True)
-                if len_best_inlier_idxs[1]/len_best_inlier_idxs[0] > 0.15:
+                if len_best_inlier_idxs[1]/len_best_inlier_idxs[0] > second_inlier_ratio:
                     break
                 else:
                     print('Relaxing re-projection error threshold...')
@@ -502,12 +494,14 @@ class Node:
                 'max_num_matches': 5000,
             }
             self.matcher_model = loftr.loftr(default_conf)
+            print('Loaded LoFTR model!')
         else:
             self.matcher_model = match_features.load_model(self.detector, self.matcher)
             self.detector_model = detect_features.load_model(self.detector)
 
-        self.retrieval_model = detect_features.load_model('netvlad')
-        print('Loaded Netvlad model')
+        if self.retrieval == 'netvlad':
+            self.retrieval_model = detect_features.load_model('netvlad')
+            print('Loaded Netvlad model')
 
     def draw_matches(self, I1, I2, kp1, kp2, matches, fname, PLOT_FIGS=False):
 
@@ -532,7 +526,6 @@ class Node:
             K1 = np.array(intrinsics['camera_matrix'])
         else:
             raise Exception('No intrinsics file found')
-        self.K1 = K1
 
         for i in range(num_images):
             if skip is not None and i % skip != 0:
@@ -542,7 +535,7 @@ class Node:
             D1 = cv2.imread(join(self.data_folder, 'depth', str(i + 1) + '.png'), cv2.IMREAD_UNCHANGED)
             pose1 = poses[i][1:8]
             self.counter = i
-            self.create_anchor(I1, D1, pose1)
+            self.create_anchor(I1, D1, K1, pose1)
             print('\nAnchor created for image %i/%i\n' % (i + 1, num_images))
 
 

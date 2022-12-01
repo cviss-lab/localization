@@ -446,6 +446,15 @@ def pose2matrix(pose):
     T_m_c[:3,3] = p
     return T_m_c
 
+def pq2matrix(pq):
+    p = pq[0]
+    q = pq[1]
+    R = Rotation.from_quat(q)
+    T_m_c = np.eye(4)
+    T_m_c[:3,:3] = R.as_matrix()
+    T_m_c[:3,3] = p
+    return T_m_c
+
 def matrix2poses(T_m_c):
     R = T_m_c[:3,:3]
     C = T_m_c[:3,3]
