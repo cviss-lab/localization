@@ -10,7 +10,7 @@ from scipy.spatial.transform import Rotation
 import open3d as o3d
 import json
 from ssloc_offline import ssloc
-from render_depthmap_example.visualization import VisOpen3D
+from render_depthmap import VisOpen3D
 
 global img_i
 global data_folder
