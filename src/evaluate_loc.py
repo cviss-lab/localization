@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from scipy.spatial.transform import Rotation
 import open3d as o3d
 import json
-from ssloc_offline import ssloc
+from localization.src.localization import Localization
 from render_depthmap import VisOpen3D
 
 global img_i
@@ -191,7 +191,7 @@ def main():
     show_results=False
 
     # # create new anchors    
-    # n = ssloc(debug=False, data_folder=images_folder, create_new_anchors=True)
+    # n = Localization(debug=False, data_folder=images_folder, create_new_anchors=True)
     # n.create_offline_anchors()    
     # n.create_offline_anchors(skip=1, num_images=250)    
 
@@ -221,7 +221,7 @@ def main():
 
     # # query panoramas
     for d,m in zip(detectors,matchers) :
-        n = ssloc(data_folder=images_folder, create_new_anchors=False,detector=d, matcher=m)
+        n = Localization(data_folder=images_folder, create_new_anchors=False,detector=d, matcher=m)
         # ssl
         # n.query_panoramas(query_panorama, optimization=False, one_view=True, results_prefix=d+'_ssl_')
         # msl
@@ -260,7 +260,7 @@ def main():
             f.write('\n') 
 
     # # query front
-    # n = ssloc(debug=False, data_folder=images_folder, create_new_anchors=False)
+    # n = Localization(debug=False, data_folder=images_folder, create_new_anchors=False)
     # n.query_front(query_front, max_reproj_error=5)
     # n.query_front_multiple(query_front,max_reproj_error=5)
     # print('front camera errors:')

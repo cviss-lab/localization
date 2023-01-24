@@ -25,7 +25,7 @@ from hloc_toolbox.hloc.matchers import loftr
 torch.cuda.empty_cache()
 
 
-class ssloc:
+class Localization:
 
     def __init__(self, data_folder=None, results_dir=None, create_new_anchors=False, detector='loftr', matcher='loftr', retrieval='netvlad'):
 

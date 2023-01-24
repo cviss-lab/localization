@@ -17,7 +17,7 @@ import cv2
 import message_filters
 import utils
 import matplotlib.pyplot as plt
-from ssloc_offline import ssloc
+from localization.src.localization import localization
 
 class Node:
 
@@ -56,7 +56,7 @@ class Node:
         self.num_query_devices = rospy.get_param('/num_users',default=1) 
 
         # load models
-        self.ssloc = ssloc(results_dir=self.results_dir, create_new_anchors=self.create_new_anchors, detector=self.detector, matcher=self.matcher)
+        self.localization = localization(results_dir=self.results_dir, create_new_anchors=self.create_new_anchors, detector=self.detector, matcher=self.matcher)
 
         utils.make_dir(join(self.results_dir), delete_if_exists=self.create_new_anchors)
         utils.make_dir(join(self.results_dir,'local_features'))
@@ -171,7 +171,7 @@ class Node:
             D1 = cv_bridge.imgmsg_to_cv2(args[1], desired_encoding='passthrough')
             K1 = self.K1
 
-            self.ssloc.create_anchor(I1, D1, K1, pose1)
+            self.localization.create_anchor(I1, D1, K1, pose1)
 
             self.currently_running = False        
 
@@ -228,7 +228,7 @@ class Node:
                 N_images = len(self.query_images[query_frame_id])
                 if N_images >= N_msloc:
 
-                    T_m1_c2, len_best_inliers, T_m1_m2 = self.ssloc.callback_query_multiple(I2_l=self.query_images[query_frame_id], 
+                    T_m1_c2, len_best_inliers, T_m1_m2 = self.localization.callback_query_multiple(I2_l=self.query_images[query_frame_id], 
                                                                                     T2_l=self.query_poses[query_frame_id], 
                                                                                     K2=K2, optimization=False,
                                                                                     max_reproj_error=3,retrieved_anchors=retrieved_anchors,
@@ -244,7 +244,7 @@ class Node:
                 else:
                     return
             else:
-                T_m1_c2, len_best_inliers = self.ssloc.callback_query(I2,K2,retrieved_anchors=retrieved_anchors,max_reproj_error=3)
+                T_m1_c2, len_best_inliers = self.localization.callback_query(I2,K2,retrieved_anchors=retrieved_anchors,max_reproj_error=3)
                 if T_m1_c2 is None:
                     return
 
