@@ -6,7 +6,7 @@ RUN echo "deb http://deb.debian.org/debian bullseye-backports main" > /etc/apt/s
 # Some of the c libraries requires compilation
 RUN apt-get update && apt-get install -y --no-install-recommends -t bullseye-backports \
     cmake git build-essential \
-    weasyprint \
+    wget \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -25,5 +25,12 @@ RUN pip install -r requirements.txt
 COPY ./localization/libs /app/libs
 COPY ./localization/api /app/api
 
+# download models
+WORKDIR /app/api/third-party/netvlad
+RUN wget https://cvg-data.inf.ethz.ch/hloc/netvlad/Pitts30K_struct.mat
+WORKDIR /app/api/third-party/LoFTR/weights
+RUN wget https://raw.githubusercontent.com/MACILLAS/LoFTR/master/weights/outdoor_ds.ckpt
+
+# setup endpoint
 WORKDIR /app/api
 CMD ["python3", "app.py"]

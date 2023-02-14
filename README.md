@@ -7,6 +7,7 @@ Server for image-based localization
 - [docker](https://docs.docker.com/engine/install/) (makes sure to run the
   [linux post-installation steps](https://docs.docker.com/engine/install/linux-postinstall/)
 - [python](https://www.python.org/downloads/) 3.9+
+- [nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html)
 
 ## Running locally
 
