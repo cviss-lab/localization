@@ -23,6 +23,23 @@ framework.
 
 Previous projects should be stored in `$HOME/datasets` under `project_1`, `project_2`, etc...
 
+Each project has the following architecture
+```
+.
+├── ...
+├── project_1            # Project
+│   ├── rgb              # RGB reference images
+│      ├── 1.png         
+│      |── 2.png                            
+│      └── ...                            
+│   ├── depth            # depth reference images
+│      ├── 1.png         
+│      |── 2.png                            
+│      └── ...         
+│   |── poses.csv        # image pose of reference camera when each image was captured
+│   └── intrinsics.json  # camera intrinsics of reference camera
+└── ...
+```
 ## API Examples
 Loading project: 
 ```
