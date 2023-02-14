@@ -1,5 +1,0 @@
-sensor_msgs/CompressedImage[] images
-sensor_msgs/CameraInfo camera_info
-geometry_msgs/Pose[] poses
----
-geometry_msgs/Pose reloc_pose

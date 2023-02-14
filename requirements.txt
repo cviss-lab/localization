@@ -1,9 +1,0 @@
-# TODO: Update with exact module version
-numpy
-opencv-python
-torch>=1.1
-torchvision>=0.3
-tqdm
-matplotlib
-scipy
-h5py
