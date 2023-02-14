@@ -75,7 +75,7 @@ class Localizer:
             feature_conf = extract_features.confs[self.detector]
             self.feature_path = extract_features.main(feature_conf, images, features_dir)
 
-        wrapper.unwrap_features_db(self.feature_path, self.data_dir)
+        #wrapper.unwrap_features_db(self.feature_path, self.data_dir)
             
 
     def callback_query(self, I2, K2, max_reproj_error=8, retrieved_anchors=5, similarity_threshold=0.1):

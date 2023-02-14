@@ -25,11 +25,10 @@ RUN pip install -r requirements.txt
 COPY ./localization/libs /app/libs
 COPY ./localization/api /app/api
 
-# download models
-WORKDIR /app/api/third-party/netvlad
-RUN wget https://cvg-data.inf.ethz.ch/hloc/netvlad/Pitts30K_struct.mat
-WORKDIR /app/api/third-party/LoFTR/weights
-RUN wget https://raw.githubusercontent.com/MACILLAS/LoFTR/master/weights/outdoor_ds.ckpt
+# download and rename models
+COPY ./localization/dockerfiles/api/download_models.sh download_models.sh 
+RUN chmod +x download_models.sh
+RUN ./download_models.sh
 
 # setup endpoint
 WORKDIR /app/api
