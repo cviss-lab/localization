@@ -22,7 +22,7 @@ COPY ./localization/api/requirements.txt .
 RUN pip install -r requirements.txt
 
 # copy project
-COPY ./localization/libs /libs
+COPY ./localization/libs /app/libs
 COPY ./localization/api /app/api
 
 WORKDIR /app/api
