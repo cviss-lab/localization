@@ -23,6 +23,10 @@ def load_localizer(project_id: int) -> typing.Tuple[localization.Localizer]:
 
     return loc
 
+loc_1 = load_localizer(1)
+localizers[1] = loc_1
+intrinsics[1] = loc_1.camera_matrix
+
 app.logger.info("API server ready")
 
 @app.route("/api/v1/project/<int:project_id>/load")
@@ -59,8 +63,11 @@ def localize_request(project_id):
 
             camera_matrix = intrinsics[project_id]
             T_m1_c2, inliers = loc.callback_query(img, camera_matrix)
-            pose = matrix2pose(T_m1_c2)
-            res = {'pose':tuple(pose.tolist()), 'inliers':inliers}
+            if T_m1_c2 is None:
+                res = {'success':False}
+            else:
+                pose = matrix2pose(T_m1_c2)
+                res = {'pose':tuple(pose.tolist()), 'inliers':inliers, 'success':True}
 
             return flask.make_response(res)
 
@@ -71,4 +78,5 @@ def localize_request(project_id):
 
 
 if __name__ == "__main__":
-    app.run(host='0.0.0.0',port=5000)
+    #app.run(host='0.0.0.0',port=5000)
+    app.run(host='::',port=5000)    

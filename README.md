@@ -44,13 +44,13 @@ Each project has the following architecture
 ## API Examples
 Loading project: 
 ```
-curl http://0.0.0.0:5000/api/v1/project/1/load
+curl http://localhost:5000/api/v1/project/1/load
 ```
 Providing query camera intrinsics (assuming query camera is different from reference camera):
 ```
-curl -X POST -F image=@<path-to-intrinsics> http://0.0.0.0:5000/api/v1/project/1/intrinsics
+curl -X POST -H "Content-Type: application/json"  -d @<path-to-intrinsics> http://localhost:5000/api/v1/project/1/intrinsics
 ```
 Localizing query image:
 ```
-curl -X POST -F image=@<path-to-img> http://0.0.0.0:5000/api/v1/project/1/localize
+curl -X POST -F image=@<path-to-img> http://localhost:5000/api/v1/project/1/localize
 ```

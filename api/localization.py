@@ -156,7 +156,7 @@ class Localizer:
 
             # self.draw_matches(I1, I2, kp1, kp2, matches)                  
 
-        if pts2D_all.shape[0] < 10:
+        if pts2D_all.shape[0] < 50:
             print('\nNo anchors found! Try again with another query image..\n')
             return None,None
 
