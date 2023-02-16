@@ -178,6 +178,188 @@ class Localizer:
 
         return T_m1_c2, num_inliers
 
+    def callback_query_multiple(self, Ip=None, fov=90, I2_l=None, T2_l=None, K2=None, 
+                                optimization=True, max_reproj_error=10,
+                                retrieved_anchors=5, similarity_threshold=0.1,
+                                second_inlier_ratio=0.15):
+        
+        if Ip is not None:
+            print('query panorama image recieved!')
+            I2_l, T2_l, K2 = utils.fun_rectify_views(Ip, fov)
+        elif I2_l is not None and T2_l is not None and K2 is not None:
+            print('multiple query images recieved!')
+        else:
+            raise Exception("incorrect inputs provided to function")
+
+        query_poses_l = []
+        pts2D_all = []
+        pts3D_all = []
+        N = len(I2_l)
+        max_retries = 4
+
+        # print('\nsimilarity score between anchor and query: %.4f' % scores[0])
+
+        for k in range(N):
+
+            pts2D_img = np.array([]).reshape(0,2)
+            pts3D_img = np.array([]).reshape(0,3)                                
+
+            print('\nProcessing view %i\n' % (k+1))
+            I2 = I2_l[k]
+
+            # query_rot = tf.transformations.quaternion_from_matrix(T2_l[k]).tolist()
+            query_rot = Rotation.from_matrix(T2_l[k][:3, :3]).as_quat().tolist()
+            query_pos = T2_l[k][:3,3].tolist()
+            query_poses_l.append(query_pos + query_rot)
+
+            if one_view is not None:
+                if k+1 != one_view:
+                    pts2D_all.append(pts2D_img)
+                    pts3D_all.append(pts3D_img)  
+                    continue 
+
+            print('Detecting local features in query image...')
+            fname2_local = join(self.results_dir,'local_features','local_q.h5')        
+            kp2, des2 = self.feature_detection(I2, self.detector, fname2_local, model=self.detector_model)
+            
+            print('Retrieving similar anchors...')
+            fdir_db = join(self.results_dir,'global_features')
+            fname2_global = join(self.results_dir,'global_q.h5')
+            self.feature_detection(I2, self.retrieval, fname2_global, model=self.retrieval_model, id='q.jpg')
+
+            pairs,scores = search.main(fname2_global,fdir_db,num_matches=retrieved_anchors)
+            
+            matches1 = []
+            ret_index1 = None
+
+            for i,(p,s) in enumerate(zip(pairs,scores)):
+
+                if i > retrieved_anchors:
+                    break
+
+                if s < similarity_threshold:
+                    continue
+
+                ret_index = int(p[1].replace('.jpg',''))
+                print('retrieved anchor %i\n' % ret_index)
+
+                # load rgb image
+                I1 = cv2.imread(join(self.results_dir,'rgb','rgb_%i.png' % ret_index))
+                D1 = cv2.imread(join(self.results_dir,'depth','depth_%i.png' % ret_index),cv2.IMREAD_UNCHANGED)
+                K1 = np.loadtxt(join(self.results_dir,'K1.txt'))
+                pose1 = np.loadtxt(join(self.results_dir,'poses','pose_%i.txt' % ret_index))
+
+                if self.detector == 'ORB' or self.detector == 'SIFT' or self.detector == 'SURF':
+                    fname1_local = join(self.results_dir,'rgb','rgb_%i.png' % ret_index)    
+                    I1 = cv2.imread(fname1_local)  
+                    kp1, des1 = self.feature_detection(I1, self.detector)       
+                elif self.detector == "loftr":
+                    des1 = None
+                    des2 = None
+                    fname2_local = None                
+                    fname1_local = join(self.results_dir,'rgb','rgb_%i.png' % ret_index)    
+                    I1 = cv2.imread(fname1_local)  
+                else:
+                    fname1_local = join(self.results_dir,'local_features','local_%i.h5' % ret_index)             
+                    kp1 = detect_features.load_features(fname1_local)
+                    des1 = None # not used for superpoint
+
+                print('Matching features in query image...')
+
+
+                print('Matching features in query image...')
+                if self.matcher == "loftr":
+                    matches, kp1, kp2 = self.feature_matching(des1, des2, self.detector, self.matcher, fname1_local,
+                                                            fname2_local,
+                                                            model=self.matcher_model, img1=I1, img2=I2)
+                else:
+                    matches = self.feature_matching(des1,des2,self.detector,self.matcher, fname1_local, fname2_local, 
+                                                    model=self.matcher_model)
+
+
+                if len(matches) >len(matches1):
+                    matches1 = matches
+                    ret_index1 = ret_index
+
+                if len(matches) > 10:
+                    pts1 = np.float32([ kp1[m.queryIdx].pt for m in matches ])
+                    pts2 = np.float32([ kp2[m.trainIdx].pt for m in matches ])
+
+                    x_c,y_c,z_c = utils.project_2d_to_3d(pts1.T,K1,D1,h=0)
+
+                    pts3D_c = np.array([x_c,y_c,z_c,np.ones(x_c.shape[0])])
+
+                    tc = pose1[:3]
+                    qc = pose1[3:]
+                    T_m1_c1 = np.eye(4)
+                    T_m1_c1[:3, :3] = Rotation.from_quat(qc).as_matrix()
+                    T_m1_c1[:3,3] = tc
+
+                    pts3D = T_m1_c1.dot(pts3D_c)
+                    pts3D = pts3D[:3,:]/pts3D[3,:]
+
+                    pts3D = pts3D.T            
+                    
+                    idx = np.array([i for i,p in enumerate(pts3D) if not np.any(np.isnan(p))])
+                    if len(idx) == 0:
+                        break
+
+                    pts3D = pts3D[idx]
+                    pts2D = pts2[idx]
+
+                    pts2D_img = np.vstack([pts2D_img,pts2D])
+                    pts3D_img = np.vstack([pts3D_img,pts3D])
+
+            pts2D_all.append(pts2D_img)
+            pts3D_all.append(pts3D_img)
+
+        if np.sum([len(p) for p in pts2D_all]) < 50:
+            print('\nNo anchors found! Try again with another query image..\n')  
+            return None, None, None
+
+        if one_view is not None:
+            _, rvecs, tvecs, inliers = cv2.solvePnPRansac(pts3D_all[0], pts2D_all[0], K2, None, flags=cv2.SOLVEPNP_P3P)
+            best_inlier_idxs = [inliers]
+            rvecs_l = [rvecs]
+            tvecs_l = [tvecs]
+        else:
+            for r in range(max_retries):
+                
+                T_m1_m2,tvecs_l,rvecs_l,best_inlier_idxs=utils.multiviewSolvePnPRansac(pts3D_all, pts2D_all, query_poses_l, K2, max_reproj_error=max_reproj_error) 
+                
+                len_best_inlier_idxs = sorted([len(inliers) for inliers in best_inlier_idxs], reverse=True)
+                if len_best_inlier_idxs[1]/len_best_inlier_idxs[0] > second_inlier_ratio:
+                    break
+                else:
+                    print('Relaxing re-projection error threshold...')
+                    max_reproj_error += 5
+                
+        if optimization:
+            pts2D_all = [p[inliers] for p,inliers in zip(pts2D_all,best_inlier_idxs)]
+            pts3D_all = [p[inliers] for p,inliers in zip(pts3D_all,best_inlier_idxs)]
+            T_m1_m2,tvecs_l,rvecs_l=utils.multiviewSolvePnPOptimization(pts3D_all, pts2D_all, query_poses_l, K2, T_m1_m2) 
+
+        print('\nquery cameras localized!\n')  
+
+        len_best_inlier_idxs = [len(inliers) for inliers in best_inlier_idxs]
+        if one_view is not None:
+            print('Inliers in View {}: {}' .format(one_view, len(inliers)))
+        else:
+            for i in range(len(best_inlier_idxs)):
+                print('Inliers in View {:d}: {:d}' .format(i, len(best_inlier_idxs[i])))
+
+        # compute relocalized pose of front image
+        R_ = cv2.Rodrigues(rvecs_l[0])[0]
+        R = R_.T
+        C = -R_.T.dot(tvecs_l[0])
+        T_m1_c2 = np.eye(4)
+        T_m1_c2[:3, :3] = R
+        T_m1_c2[:3, 3] = C.reshape(-1)
+        if one_view:
+            T_m1_m2 = T_m1_c2
+
+        return T_m1_c2, len_best_inlier_idxs, T_m1_m2
+
     def feature_detection(self, I, fname=None, img_name=None, dataset=None):
 
         if self.detector == 'SIFT':
