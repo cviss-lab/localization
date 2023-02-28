@@ -1,7 +1,7 @@
 import cv2
 from PIL import Image
 import numpy as np
-from shapely import Polygon
+# from shapely import Polygon
 
 # from loader import *
 import copy

@@ -54,3 +54,7 @@ Localizing query image:
 ```
 curl -X POST -F image=@<path-to-img> http://localhost:5000/api/v1/project/1/localize
 ```
+Sending raw data in zip file to localization server
+```
+curl -X POST -H "Content-Type: application/octet-stream" -F "data=@<path-to-zip>" http://localhost:5000/api/v1/project/3/upload
+```

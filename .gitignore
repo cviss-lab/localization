@@ -7,8 +7,7 @@
 **/node_modules/
 **/__pycache__/
 
-test_data/*
-garment_st_test/*
+config/*
 
 **/web/public/bundle.js
 

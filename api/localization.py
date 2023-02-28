@@ -49,7 +49,7 @@ class Localizer:
         self.depth_dict = loader.load_imgs_dict(self.poses, "depth")        
         self.poses = loader.load_poses()
 
-        self.load_models()
+        self.load_models()        
 
     def load_depth(self, img_idx):
         return self.loader.load_depth(os.path.join("depth", self.depth_dict[img_idx]))
@@ -475,12 +475,16 @@ class Localizer:
 
     def load_matcher(self, matcher):
         if matcher == 'loftr':
-            default_conf = {
-                'weights': 'outdoor_ds.ckpt',
-                'max_num_matches': 5000,
-            }
-            model = loftr.loftr(default_conf)
-            print('Loaded LoFTR model')
+            if torch.cuda.is_available():
+                default_conf = {
+                    'weights': 'outdoor_ds.ckpt',
+                    'max_num_matches': 5000,
+                }
+                model = loftr.loftr(default_conf)
+                print('Loaded LoFTR model')
+            else:
+                model = None
+                print('CUDA is not available. Cannot load LoFTR model.')
         else:
             match_conf = match_features.confs[matcher]
             model = match_features.load_model(match_conf)

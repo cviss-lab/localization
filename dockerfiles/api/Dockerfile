@@ -14,22 +14,27 @@ WORKDIR /app
 # set environment variables
 ENV PYTHONDONTWRITEBYTECODE 1
 ENV PYTHONUNBUFFERED 1
+
+# build open3d
+COPY ./localization/api/requirements.txt .
+COPY ./localization/dockerfiles/api/build_open3d.sh /
+RUN /build_open3d.sh
+
 # install dependencies
 RUN pip install --upgrade pip
-
-COPY ./localization/api/requirements.txt .
-
 RUN pip install -r requirements.txt
-
-# copy project
-COPY ./localization/libs /app/libs
-COPY ./localization/api /app/api
 
 # download and rename models
 COPY ./localization/dockerfiles/api/download_models.sh download_models.sh 
 RUN chmod +x download_models.sh
 RUN ./download_models.sh
 
+# copy project
+COPY ./localization/libs /app/libs
+COPY ./localization/api /app/api
+COPY ./localization/config /app/config
+
 # setup endpoint
 WORKDIR /app/api
 CMD ["python3", "app.py"]
+ENV OPEN3D_CPU_RENDERING true

@@ -1,0 +1,9 @@
+*.vscode
+*.pyc
+
+node_modules/
+__pycache__/
+
+test_data/*
+
+web/public/bundle.js

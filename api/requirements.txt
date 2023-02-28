@@ -13,7 +13,5 @@ kornia>=0.6.4
 plotly
 h5py
 pyyaml
-shapely==2.0.0
-weasyprint==52.5
-ezdxf==1.0.0
 yacs==0.1.8
+open3d==0.16.0
