@@ -32,6 +32,14 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
+        "--voxel",
+        "-v",
+        type=float,
+        default=0.015,
+        help="Voxel size",
+    )    
+
+    parser.add_argument(
         "--mobile_inspector",
         action="store_true",
         help="Input is a Mobile Inspector dataset",
@@ -47,6 +55,7 @@ if __name__ == "__main__":
     frame_rate = args.frame_rate
     mobile_inspector = args.mobile_inspector
     depth_max = args.depth_max
+    voxel = args.voxel
 
 
     # This is so that we can generate plan_view without
@@ -64,7 +73,7 @@ if __name__ == "__main__":
     t1 = time.time()
 
     if mobile_inspector:
-        preprocessor.from_mobile_inspector()
+        preprocessor.from_mobile_inspector(voxel=voxel)
 
     t2 = time.time()
 

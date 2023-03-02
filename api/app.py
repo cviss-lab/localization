@@ -114,10 +114,11 @@ def preprocess_task(sample_data,project_id):
     # remove output directory folders if they exist
     frame_rate = 2
     max_depth = 5
+    voxel = 0.01
     # create preprocessor object
     home = os.environ.get('HOME')
     process = subprocess.Popen(["python3", "preprocessor/cli.py",
-                                "-i", "/Data", "-o", sample_data, "-f", str(frame_rate), "-d", str(max_depth), 
+                                "-i", "/Data", "-o", sample_data, "-f", str(frame_rate), "-d", str(max_depth), "-v", str(voxel),
                                 "--mobile_inspector"])
     process.wait()
 

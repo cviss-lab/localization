@@ -53,10 +53,12 @@ class PreProcessor:
             os.path.join(dataset_dir, "poses.csv"),
             os.path.join(output_dir, "poses.csv"),
         )
-        shutil.copyfile(
-            os.path.join(dataset_dir, "annotations.json"),
-            os.path.join(output_dir, "annotations.json"),
-        )
+
+        shutil.rmtree(os.path.join(output_dir, "annotations.json"), ignore_errors=True)
+        # shutil.copyfile(
+        #     os.path.join(dataset_dir, "annotations.json"),
+        #     os.path.join(output_dir, "annotations.json"),
+        # )
 
         depth_1 = cv2.imread(depth_frames[0])
         depth_width = depth_1.shape[1]
