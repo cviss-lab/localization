@@ -9,6 +9,7 @@ services:
     volumes:
         - $HOME/datasets/:/root/datasets/
     network_mode: "host" 
+    restart: on-failure    
     deploy:
       resources:
         reservations:
@@ -16,3 +17,11 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+  xr_ros:
+    image: "xr_ros-api"
+    network_mode: "host" 
+    restart: on-failure    
+    depends_on:
+      - api
+    volumes:
+        - $HOME/datasets/:/root/datasets/
