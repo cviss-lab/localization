@@ -73,7 +73,7 @@ class PreProcessor:
         )
         pc = o3d.geometry.PointCloud()
 
-        for i in range(1, len(depth_frames) + 1):
+        for i in range(2, len(depth_frames) + 1):
 
             print(f"Processing frame {i}/{len(depth_frames)}", end="\r")
 

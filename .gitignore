@@ -3,6 +3,7 @@
 *.mat
 *.pth
 *.ckpt
+*.env
 
 **/node_modules/
 **/__pycache__/
