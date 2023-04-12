@@ -58,13 +58,19 @@ def localize_request(project_id):
         return flask.make_response("Project not loaded", 404)
     
     if flask.request.method == "POST":
+
+        if flask.request.files.get("camera_matrix"):
+            json_str=flask.request.files["camera_matrix"].read()
+            camera_matrix = np.frombuffer(json_str, dtype="float").reshape(3,3)
+        else:
+            return flask.make_response("Intrinsics not found", 404)
+
         if flask.request.files.get("image"):
             loc = localizers[project_id]
 
             img = Image.open(io.BytesIO(flask.request.files["image"].read()))    
             img = np.array(img)
-
-            camera_matrix = intrinsics[project_id]
+            
             T_m1_c2, inliers = loc.callback_query(img, camera_matrix)
             if T_m1_c2 is None:
                 res = {'success':False}
@@ -79,6 +85,50 @@ def localize_request(project_id):
     else:
         return flask.make_response("Invalid request", 404)
 
+@app.route("/api/v1/project/<int:project_id>/localize_multiple", methods=["POST"])
+def localize_multiple_request(project_id):
+    if project_id not in localizers:
+        return flask.make_response("Project not loaded", 404)
+    
+    if flask.request.method == "POST":
+
+        N_imgs = len(flask.request.files) - 2
+        if N_imgs < 1:
+            return flask.make_response("Incorrect number of inputs", 404)
+        
+        if flask.request.files.get("camera_matrix"):
+            json_str=flask.request.files["camera_matrix"].read()
+            camera_matrix = np.frombuffer(json_str, dtype="float").reshape(3,3)
+        else:
+            return flask.make_response("Intrinsics not found", 404)        
+
+        if flask.request.files.get("poses"):
+            json_str=flask.request.files["poses"].read()
+            poses_l = np.frombuffer(json_str, dtype="float").reshape(-1,7)
+            poses_l = poses_l.tolist()
+        else:
+            return flask.make_response("Poses not found", 404)  
+
+        loc = localizers[project_id]
+        I2_l = []
+        
+        for fkey in flask.request.files.keys():
+            if "image" in fkey:            
+                img = Image.open(io.BytesIO(flask.request.files[fkey].read()))    
+                img = np.array(img)
+                I2_l.append(img)
+
+        T_m1_m2, inliers = loc.callback_query_multiple(I2_l, poses_l, camera_matrix)
+        if T_m1_m2 is None:
+            res = {'success':False}
+        else:
+            pose = matrix2pose(T_m1_m2)
+            res = {'pose':tuple(pose.tolist()), 'inliers':inliers, 'success':True}
+
+        return flask.make_response(res)
+
+    else:
+        return flask.make_response("Invalid request", 404)
 
 # post request method for uploading data to local filesystem for development
 @app.route("/api/v1/project/<int:project_id>/upload", methods=["POST"])
