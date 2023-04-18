@@ -18,7 +18,7 @@ ENV PYTHONUNBUFFERED 1
 # build open3d
 COPY ./localization/api/requirements.txt .
 COPY ./localization/dockerfiles/api/build_open3d.sh /
-RUN /build_open3d.sh
+# RUN /build_open3d.sh
 
 # install dependencies
 RUN pip install --upgrade pip
