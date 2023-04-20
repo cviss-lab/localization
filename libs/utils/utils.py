@@ -212,3 +212,102 @@ def fun_rectify_views(I_p,fov):
     T_list = [T1,T2,T3,T4]
 
     return I_list, T_list, K1
+
+
+def detect_markers(I,find_ids=None,xy_array=False,ignore_zeros=True):
+
+    gray = cv2.cvtColor(I, cv2.COLOR_BGR2GRAY)
+
+    w = int(I.shape[1])
+    h = int(I.shape[0])
+
+    # define names of each possible ArUco tag OpenCV supports
+    ARUCO_DICT = {
+        "DICT_4X4_50": cv2.aruco.DICT_4X4_50,
+        "DICT_4X4_100": cv2.aruco.DICT_4X4_100,
+        "DICT_4X4_250": cv2.aruco.DICT_4X4_250,
+        "DICT_4X4_1000": cv2.aruco.DICT_4X4_1000,
+        "DICT_5X5_50": cv2.aruco.DICT_5X5_50,
+        "DICT_5X5_100": cv2.aruco.DICT_5X5_100,
+        "DICT_5X5_250": cv2.aruco.DICT_5X5_250,
+        "DICT_5X5_1000": cv2.aruco.DICT_5X5_1000,
+        "DICT_6X6_50": cv2.aruco.DICT_6X6_50,
+        "DICT_6X6_100": cv2.aruco.DICT_6X6_100,
+        "DICT_6X6_250": cv2.aruco.DICT_6X6_250,
+        "DICT_6X6_1000": cv2.aruco.DICT_6X6_1000,
+        "DICT_7X7_50": cv2.aruco.DICT_7X7_50,
+        "DICT_7X7_100": cv2.aruco.DICT_7X7_100,
+        "DICT_7X7_250": cv2.aruco.DICT_7X7_250,
+        "DICT_7X7_1000": cv2.aruco.DICT_7X7_1000,
+        "DICT_ARUCO_ORIGINAL": cv2.aruco.DICT_ARUCO_ORIGINAL,
+        "DICT_APRILTAG_16h5": cv2.aruco.DICT_APRILTAG_16h5,
+        "DICT_APRILTAG_25h9": cv2.aruco.DICT_APRILTAG_25h9,
+        "DICT_APRILTAG_36h10": cv2.aruco.DICT_APRILTAG_36h10,
+        "DICT_APRILTAG_36h11": cv2.aruco.DICT_APRILTAG_36h11
+    }
+
+    # loop over the types of ArUco dictionaries
+    for (arucoName, _) in ARUCO_DICT.items():
+        
+        # load the ArUCo dictionary, grab the ArUCo parameters, and
+        # attempt to detect the markers for the current dictionary
+
+        dictionary = cv2.aruco.getPredefinedDictionary(ARUCO_DICT[arucoName])
+        parameters =  cv2.aruco.DetectorParameters()
+        parameters.adaptiveThreshConstant = 15
+        detector = cv2.aruco.ArucoDetector(dictionary, parameters)
+
+        (corners, ids, rejected) = detector.detectMarkers(gray)    
+
+        if ids is not None:
+            # print(arucoName)
+            break
+
+    if ids is None:
+        return []
+    ids = list(ids.reshape(-1))
+
+    # if specified, only find markers with ids in find_ids list
+    if isinstance(find_ids,list):
+        corners2 = []
+        ids2 = []
+        for i,c in zip(ids,corners):
+            if i in find_ids:
+                ids2.append(i)
+                corners2.append(c)
+    else:
+        corners2 = corners
+        ids2 = ids
+
+    objects = []
+    for c,i in zip(corners2,ids2):
+        con = c.reshape(-1, 2)
+        if con.shape[0] < 3:
+            continue
+
+        if ignore_zeros and ids==0:
+            continue
+
+        obj = dict([])
+        obj['id'] = 'ID:'+str(i)
+        obj['confidence'] = 1.0
+
+        if xy_array:
+            coords = np.array([[],[]])
+            for pt in con:
+                x = float(pt[0])
+                y = float(pt[1])
+                coords = np.hstack([coords,[[x],[y]]])
+            obj['coords'] = coords
+        else:
+            obj['coords'] = []
+            for pt in con:
+                coords = dict([])
+                coords['x'] = float(pt[0])
+                coords['y'] = float(pt[1])
+                obj['coords'].append(coords)
+
+        objects.append(obj)     
+
+    return objects
+

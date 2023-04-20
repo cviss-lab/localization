@@ -224,6 +224,9 @@ class Localizer:
             else:
                 print('Relaxing re-projection error threshold...')
                 max_reproj_error += 5
+                if max_reproj_error > 20:
+                    print('\nCould not find optimal solution..\n')  
+                    return None, None                    
                 
         if optimization:
             pts2D_all = [p[inliers] for p,inliers in zip(pts2D_all,best_inlier_idxs)]
