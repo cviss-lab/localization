@@ -4,7 +4,7 @@ opencv-python-headless==4.6.0.66
 pandas==1.5.1
 Pillow==9.3.0
 scipy==1.9.3
-Flask==2.2.2
+Flask==2.3.2
 einops==0.6.0
 torch==1.13.1
 torchvision==0.14.1
