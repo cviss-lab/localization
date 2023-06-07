@@ -8,6 +8,7 @@ import csv
 from scipy.spatial.transform import Rotation
 
 from libs.utils.loader import *
+from libs.utils.strayscanner import *
 from libs.utils.projection import *
 
 
@@ -18,6 +19,224 @@ class PreProcessor:
         self.frame_rate = frame_rate
         self.depth_max = depth_max
         self.loader = LocalLoader(".")
+
+    def complete_depth(self, full=False):
+        """
+        Completes depth maps for all images in the dataset using cloud.ply
+        :param data_folder: path to the dataset folder
+        """
+        data_folder = self.output_dir
+
+        os.makedirs(os.path.join(data_folder, "depth"), exist_ok=True)
+        pointcloud = self.loader.load_pc(os.path.join(data_folder, "cloud.ply"))
+
+        poses = self.loader.load_poses(os.path.join(data_folder, "poses.csv"))
+        depth_dict = self.loader.load_imgs_dict(
+            poses, os.path.join(data_folder, "depth")
+        )
+        depth_1 = list(depth_dict.values())[0]
+        depth_1 = cv2.imread(
+            os.path.join(data_folder, "depth", depth_1), cv2.IMREAD_UNCHANGED
+        )
+        depth_h, depth_w = depth_1.shape
+
+        K, image_width, image_height = self.loader.load_intrinsics(
+            os.path.join(data_folder, "intrinsics.json")
+        )
+        Ks = resize_camera_matrix(K, depth_w / image_width, depth_h / image_height)
+
+        for i, img in enumerate(depth_dict):
+            print(f"Completing depth frame {i}/{len(poses.keys())}", end="\r")
+            pose = poses[img]
+            D = cv2.imread(
+                os.path.join(data_folder, "depth", depth_dict[img]),
+                cv2.IMREAD_UNCHANGED,
+            )
+            D_cloud = cloud_to_depth(
+                pointcloud, Ks, pose, w=depth_w, h=depth_h, point_size=2
+            )
+            if full:
+                D = D_cloud
+            else:
+                D[D == 0] = D_cloud[D == 0]
+            cv2.imwrite(
+                os.path.join(
+                    data_folder, os.path.join(data_folder, "depth", depth_dict[img])
+                ),
+                D,
+            )
+
+    def from_lidar(self, scale=0.5):
+        """
+        Precalculates depth maps for all images in the dataset and saves them as png images
+        :param data_folder: path to the dataset folder
+        :param scale: scale factor for the depth map
+        """
+        data_folder = self.input_dir
+        output_dir = self.output_dir
+
+        os.makedirs(os.path.join(output_dir, "depth"), exist_ok=True)
+
+        pointcloud = self.loader.load_pc(os.path.join(data_folder, "cloud.ply"))
+        K, image_width, image_height = self.loader.load_intrinsics(
+            os.path.join(data_folder, "intrinsics.json")
+        )
+
+        poses = self.loader.load_poses(os.path.join(data_folder, "poses.csv"))
+        rgb_dict = self.loader.load_imgs_dict(poses, os.path.join(data_folder, "rgb"))
+
+        for i, img in enumerate(rgb_dict):
+            print(f"Processing frame {i}", end="\r")
+            pose = poses(img)
+            D = cloud_to_depth(
+                pointcloud,
+                K,
+                pose,
+                w=image_width,
+                h=image_height,
+                s=scale,
+                point_size=3,
+            )
+            cv2.imwrite(os.path.join(output_dir, "depth/{:06}.png".format(i + 1)), D)
+
+    def from_stray_scanner(self, resize=1, voxel=0.015, filter_level=2):
+        """
+        Preprocesses the Stray Scanner dataset
+        :param dataset_dir: path to the Stray Scanner dataset
+        :param output_dir: path to the output directory
+        :param depth_max: maximum depth for the depth images
+        :param frame_rate: frame rate of the output images
+        :param voxel: voxel size for the downsampling of the point cloud
+        :param resize: scale factor for the rgb images
+        """
+
+        dataset_dir = self.input_dir
+        output_dir = self.output_dir
+        depth_max = self.depth_max
+        frame_rate = self.frame_rate
+
+        camera_matrix = np.loadtxt(
+            os.path.join(dataset_dir, "camera_matrix.csv"), delimiter=","
+        )
+        odometry = np.loadtxt(
+            os.path.join(dataset_dir, "odometry.csv"), delimiter=",", skiprows=1
+        )
+        transforms = []
+        poses = []
+
+        # shutil.rmtree(output_dir, ignore_errors=True)
+        os.makedirs(os.path.join(output_dir, "rgb"))
+        os.makedirs(os.path.join(output_dir, "depth"))
+
+        for line in odometry:
+            # timestamp, frame, x, y, z, qx, qy, qz, qw
+            position = line[2:5]
+            quaternion = line[5:]
+            T_WC = np.eye(4)
+            T_WC[:3, :3] = Rotation.from_quat(quaternion).as_matrix()
+            T_WC[:3, 3] = position
+            transforms.append(T_WC)
+
+        depth_dir = os.path.join(dataset_dir, "depth")
+        depth_frames = [
+            os.path.join(depth_dir, p) for p in sorted(os.listdir(depth_dir))
+        ]
+        depth_frames = [f for f in depth_frames if ".npy" in f or ".png" in f]
+
+        depth_1 = cv2.imread(depth_frames[0])
+        depth_width = depth_1.shape[1]
+        depth_height = depth_1.shape[0]
+
+        intrinsics = get_intrinsics(camera_matrix, depth_width, depth_height)
+        pc = o3d.geometry.PointCloud()
+        rgb_path = os.path.join(dataset_dir, "rgb.mp4")
+        video = cv2.VideoCapture(rgb_path)
+
+        keep_every_frames = max([1, int(video.get(cv2.CAP_PROP_FPS) / frame_rate)])
+        i_frame = 1
+        n_frames = int(len(transforms) / keep_every_frames)
+        for i, T_WC in enumerate(transforms):
+            ret, rgb = video.read()
+            if not ret:
+                continue
+            if i % keep_every_frames != 0:
+                continue
+            print(f"Processing frame {i_frame}/{n_frames}", end="\r")
+            T_CW = np.linalg.inv(T_WC)
+            confidence = load_confidence(
+                os.path.join(dataset_dir, "confidence", f"{i:06}.png")
+            )
+            depth_path = depth_frames[i]
+            depth, depth_mm = load_depth(
+                depth_path, confidence, filter_level=filter_level
+            )
+
+            rgb_h = int(rgb.shape[0] * resize)
+            rgb_w = int(rgb.shape[1] * resize)
+
+            rgb_cv = cv2.resize(rgb, (rgb_w, rgb_h))
+
+            cv2.imwrite(
+                os.path.join(output_dir, "rgb/{:06}.jpg".format(i_frame)), rgb_cv
+            )
+            cv2.imwrite(
+                os.path.join(output_dir, "depth/{:06}.png".format(i_frame)), depth_mm
+            )
+
+            rgb = cv2.cvtColor(rgb, cv2.COLOR_BGR2RGB)
+
+            rgb = Image.fromarray(rgb)
+            rgb = rgb.resize((depth_width, depth_height))
+            rgb = np.array(rgb)
+            rgbd = o3d.geometry.RGBDImage.create_from_color_and_depth(
+                o3d.geometry.Image(rgb),
+                depth,
+                depth_scale=1.0,
+                depth_trunc=depth_max,
+                convert_rgb_to_intensity=False,
+            )
+            pc += o3d.geometry.PointCloud.create_from_rgbd_image(
+                rgbd, intrinsics, extrinsic=T_CW
+            )
+
+            line = odometry[i]
+            position = line[2:5]
+            quaternion = line[5:]
+            poses.append(
+                [
+                    i_frame,
+                    position[0],
+                    position[1],
+                    position[2],
+                    quaternion[0],
+                    quaternion[1],
+                    quaternion[2],
+                    quaternion[3],
+                ]
+            )
+            i_frame += 1
+
+        with open(os.path.join(output_dir, "poses.csv"), mode="w") as file:
+            writer = csv.writer(file, delimiter=",")
+            for row in poses:
+                writer.writerow(row)
+
+        camera_matrix_cv = resize_camera_matrix(camera_matrix, resize, resize)
+        intrinsics = {
+            "camera_matrix": camera_matrix_cv.tolist(),
+            "dist_coeff": [0, 0, 0, 0, 0],
+            "height": rgb_h,
+            "width": rgb_w,
+        }
+        with open(os.path.join(output_dir, "intrinsics.json"), "w") as f:
+            json.dump(intrinsics, f)
+
+        if len(pc.points) > 2e7:
+            voxel = 2 * voxel
+            print("Increasing voxel size to stay under RAM limit..")
+
+        pc_down = pc.voxel_down_sample(voxel)
+        o3d.io.write_point_cloud(os.path.join(output_dir, "cloud.ply"), pc_down)
 
     def from_mobile_inspector(self, voxel=0.015, filter_level=2):
         """
@@ -53,12 +272,10 @@ class PreProcessor:
             os.path.join(dataset_dir, "poses.csv"),
             os.path.join(output_dir, "poses.csv"),
         )
-
-        shutil.rmtree(os.path.join(output_dir, "annotations.json"), ignore_errors=True)
-        # shutil.copyfile(
-        #     os.path.join(dataset_dir, "annotations.json"),
-        #     os.path.join(output_dir, "annotations.json"),
-        # )
+        shutil.copyfile(
+            os.path.join(dataset_dir, "annotations.json"),
+            os.path.join(output_dir, "annotations.json"),
+        )
 
         depth_1 = cv2.imread(depth_frames[0])
         depth_width = depth_1.shape[1]
@@ -73,7 +290,7 @@ class PreProcessor:
         )
         pc = o3d.geometry.PointCloud()
 
-        for i in range(2, len(depth_frames) + 1):
+        for i in range(1, len(depth_frames) + 1):
 
             print(f"Processing frame {i}/{len(depth_frames)}", end="\r")
 
@@ -129,22 +346,43 @@ class PreProcessor:
             print("Increasing voxel size to stay under RAM limit..")
 
         pc_down = pc.voxel_down_sample(voxel)
-        o3d.io.write_point_cloud(os.path.join(output_dir, "cloud.pcd"), pc_down)
+        o3d.io.write_point_cloud(os.path.join(output_dir, "cloud.ply"), pc_down)
 
+        # pick ground plane points normal to z axis (id, x, y, z)
+        picking_list = np.array([[-1, 1, 0, 0], [-1, 2, 0, 0], [-1, 1, 1, 0]]).reshape(
+            (-1, 4)
+        )
+        np.savetxt(
+            os.path.join(output_dir, "picking_list.txt"),
+            picking_list,
+            fmt="%d",
+            delimiter=",",
+        )
 
-def get_intrinsics(intrinsics, depth_width, depth_height, rgb_height=1440, rgb_width=1920):
-    """
-    Scales the intrinsics matrix to be of the appropriate scale for the depth maps.
-    """
-    intrinsics_scaled = resize_camera_matrix(intrinsics, depth_width / rgb_width, depth_height / rgb_height)
-    return o3d.camera.PinholeCameraIntrinsic(width=depth_width, height=depth_height, fx=intrinsics_scaled[0, 0],
-        fy=intrinsics_scaled[1, 1], cx=intrinsics_scaled[0, 2], cy=intrinsics_scaled[1, 2])
+    def cloud_exists(self):
+        """
+        Checks if the pointcloud exists (cloud.ply) in the output_dir
+        :return: Boolean
+        """
+        return os.path.isfile(os.path.join(self.output_dir, "cloud.ply"))
 
-def resize_camera_matrix(camera_matrix, scale_x, scale_y):
-    fx = camera_matrix[0, 0]
-    fy = camera_matrix[1, 1]
-    cx = camera_matrix[0, 2]
-    cy = camera_matrix[1, 2]
-    return np.array([[fx * scale_x, 0.0, cx * scale_x],
-        [0., fy * scale_y, cy * scale_y],
-        [0., 0., 1.0]])           
+    def save_plan_view(self, height: float):
+        g_plane = calc_gnd_plane(
+            self.loader.load_gnd_pts(os.path.join(self.output_dir, "picking_list.txt"))
+        )
+        map = self.loader.load_pc(os.path.join(self.output_dir, "cloud.ply"))
+
+        plan_img, P_plan = create_plan_view(
+            map, g_plane, height=height, thickness=0.2, colored=True
+        )
+        plan_img.save(os.path.join(self.output_dir, "floor_plan.png"))
+        # P_plan = np.array(P_plan).reshape(
+        #    (-1, 4)
+        # )
+
+        np.savetxt(
+            os.path.join(self.output_dir, "P_plan.txt"),
+            P_plan,
+            fmt="%f",
+            delimiter=",",
+        )
