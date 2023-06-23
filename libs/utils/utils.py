@@ -19,7 +19,7 @@ def T_inv(Tmat):
         Tmat_inv[:3,3] = t_inv
         return Tmat_inv
 
-def multiviewSolvePnPRansac(pts3D_l, pts2D_l, poses_l, K2, max_reproj_error=25, max_iterations=1000):
+def multiviewSolvePnPRansac(pts3D_l, pts2D_l, poses_l, K2, max_reproj_error=25, max_iterations=1000,extra_args=[]):
 
     n_test = 4
     n_imgs = len(pts2D_l)
@@ -30,9 +30,14 @@ def multiviewSolvePnPRansac(pts3D_l, pts2D_l, poses_l, K2, max_reproj_error=25, 
     else:
         k0 = 0
     T_m2_c_l = [pose2matrix(pose[k0:]) for pose in poses_l]
+
+    ## scale caluclations
+    # T_m1_c_l,num_inliers_l = extra_args
+    # _, T_m2_c_l = calculate_scale(T_m2_c_l, T_m1_c_l, num_inliers_l, inlier_thres=100)    
+
     best_inlier_idxs = [[] for _ in range(n_imgs)]  
     best_err = None
-    # for i_img in range(n_imgs):
+
     iterations = 0
     best_inlier_idxs = [[] for _ in range(n_imgs)]  
     while iterations < max_iterations:
@@ -59,6 +64,8 @@ def multiviewSolvePnPRansac(pts3D_l, pts2D_l, poses_l, K2, max_reproj_error=25, 
             best_inlier_idxs = inlier_idxs
             best_err = [np.array(e,dtype=np.int) for e in test_err]
             # print(T_m1_m2[:3,3])
+            # T_m2_c_l, x = QueryPosesScaleOptimization(pts3D_l, pts2D_l, K2, T_m1_m2_test, T_m2_c_l)
+
         iterations+=1
         
     tvecs_l = [matrix2poses(T_m1_m2.dot(T_m2_c))[0] for T_m2_c in T_m2_c_l]
@@ -76,7 +83,8 @@ def multiviewSolvePnPOptimization(pts3D_l, pts2D_l, poses_l, K2, T_m1_m2_init):
     T_m2_c_l = [pose2matrix(pose[k0:]) for pose in poses_l]
 
     x0 = matrix2pose(T_m1_m2_init)
-    res=least_squares(optim_multiview_pnp_error,x0, verbose=2, x_scale='jac', ftol=1e-4, method='trf',args=(pts3D_l, pts2D_l, K2, T_m2_c_l))
+    res=least_squares(optim_multiview_pnp_error,x0, verbose=2, x_scale='jac', ftol=1e-4, method='trf',
+                      args=(pts3D_l, pts2D_l, K2, T_m2_c_l))
 
     T_m1_m2 = pose2matrix(res.x)
 
@@ -85,7 +93,49 @@ def multiviewSolvePnPOptimization(pts3D_l, pts2D_l, poses_l, K2, T_m1_m2_init):
 
     return T_m1_m2,tvecs_l,rvecs_l
 
-def optim_multiview_pnp_error(x,pts3D_l, pts2D_l, K2, T_m2_c_l):
+def calculate_scale(T_m2_c_l, T_m1_c_l, inlier_l, inlier_thres=100):
+    p2_l = np.array([T_m2_c[:3,3] for T_m2_c in T_m2_c_l])
+    p1_l = np.array([T_m1_c[:3,3] for T_m1_c in T_m1_c_l])
+    inlier_l = np.array(inlier_l)
+
+    p2_l = p2_l[inlier_l>inlier_thres,:]
+    p1_l = p1_l[inlier_l>inlier_thres,:]
+
+    s1 = np.array([np.linalg.norm(p1_l[i]-p1_l[0]) for i in range(len(p1_l)) if i>0 ])
+    s2 = np.array([np.linalg.norm(p2_l[i]-p2_l[0]) for i in range(len(p2_l)) if i>0 ])
+
+    s12 = np.mean(s1/s2)
+
+    T_m2_c_ = np.stack(T_m2_c_l)
+    T_m2_c_[:,:3,3] = T_m2_c_[0,:3,3] + (T_m2_c_[:,:3,3]-T_m2_c_[0,:3,3])*s12
+    T_m2_c_lx = [T_m2_c_[i,:,:] for i in range(len(T_m2_c_l))]    
+
+    return s12, T_m2_c_lx
+
+def QueryPosesScaleOptimization(pts3D_l, pts2D_l, K2, T_m1_m2_test, T_m2_c_l):
+
+    x0 = 1
+    res=least_squares(optim_multiview_pnp_error_scale,x0,
+                    args=(pts3D_l, pts2D_l, K2, T_m1_m2_test, T_m2_c_l))
+
+    x = res.x
+
+    T_m2_c_ = np.stack(T_m2_c_l)
+    T_m2_c_[:,:3,3] = T_m2_c_[:,:3,3]*x
+    T_m2_c_lx = [T_m2_c_[i,:,:] for i in range(len(T_m2_c_l))]
+
+    return T_m2_c_lx, x
+
+def optim_multiview_pnp_error_scale(x,pts3D_l, pts2D_l, K2, T_m1_m2_test, T_m2_c_l):
+    
+    T_m2_c_ = np.stack(T_m2_c_l)
+    T_m2_c_[:,:3,3] = T_m2_c_[:,:3,3]*x
+    T_m2_c_lx = [T_m2_c_[i,:,:] for i in range(len(T_m2_c_l))]
+
+    test_err = multiview_pnp_error(pts3D_l, pts2D_l, K2, T_m1_m2_test, T_m2_c_lx)
+    return np.sum([np.sum(e) for e in test_err]) / len_subelems(test_err)
+
+def optim_multiview_pnp_error(x, pts3D_l, pts2D_l, K2, T_m2_c_l):
     T_m1_m2_test = np.eye(4)
     p0 = x[:3]
     q0 = x[3:]
@@ -310,4 +360,3 @@ def detect_markers(I,find_ids=None,xy_array=False,ignore_zeros=True):
         objects.append(obj)     
 
     return objects
-

@@ -13,6 +13,7 @@ from libs.utils.render_depthmap import VisOpen3D
 from libs.utils.projection import *
 from libs.utils.loader import *
 from libs.utils.utils import *
+import json
 
 global img_i
 global data_folder
@@ -27,7 +28,13 @@ def load_localizer(data_folder):
 
     return loc
 
-def query_front_multiple(query_data_folder, localizer, base_link=False, retrieved_anchors=5):
+def query_front_multiple(query_data_folder, localizer, out_folder, base_link=False, retrieved_anchors=5, 
+                         frame_rate=30, sample_rate=1, sliding_window = 5, min_matches=50):
+
+        shutil.rmtree(out_folder,ignore_errors=True)
+        os.makedirs(out_folder,exist_ok=True)
+
+        skip_rate = int(frame_rate/sample_rate)
 
         query_img_dir = join(query_data_folder, 'rgb')
 
@@ -41,50 +48,76 @@ def query_front_multiple(query_data_folder, localizer, base_link=False, retrieve
             raise Exception('No intrinsics file found')  
 
         I2_l = []
-        poses_l = np.loadtxt(join(query_data_folder, 'poses.csv'), delimiter=',')
+        
+        poses_all = np.loadtxt(join(query_data_folder, 'poses.csv'), delimiter=',')
+        poses_l = []
+        id_l = []   
+        poses_out = []  
 
         for num, filename in enumerate(sorted(os.listdir(query_img_dir))):
+
             ext = filename.split('.')[-1]
             if not (ext == 'jpg' or ext == 'png' or ext == 'JPG'):
                 continue
             id = int(filename.split('.')[0])
+
+            if id % skip_rate != 0:
+                continue
+
+            # if id not in [1,100,500,1000]:
+            #     continue            
+
+            id_l.append(id)
+
             image_path = os.path.join(query_img_dir, filename)
             I2 = cv2.imread(image_path)
             I2_l.append(I2)
 
-            if base_link:
-                pose = poses_l[id-1,1:]
+            pose = poses_all[id-1,1:]            
+
+            if base_link:                
                 T_m2_c2 = pose2matrix(pose)
                 T_link_c2 = pose2matrix([0,0,0,-0.5,0.5,-0.5,0.5])
                 T_m2_link = T_m2_c2
                 T_m2_c2 = T_m2_link.dot(T_link_c2)
                 pose = matrix2pose(T_m2_c2)
-                poses_l[id-1,1:] = pose
-        poses_l = [p[1:].tolist() for p in poses_l]
 
-        T_m1_m2, inliers = localizer.callback_query_multiple(I2_l, poses_l, K2, retrieved_anchors=retrieved_anchors)
+            poses_l.append(pose.tolist())
+
+            if len(poses_l) == sliding_window:
+                T_m1_m2, inliers = localizer.callback_query_multiple(I2_l, poses_l, K2, retrieved_anchors=retrieved_anchors, min_matches=min_matches)
         
-        if T_m1_m2 is None:
-            print('localization failed!')
-            return
+                if T_m1_m2 is not None:                  
 
-        poses = np.empty((0, 7))
-        for pose in poses_l:
+                    for pose,id in zip(poses_l,id_l):               
 
-            T_m2_c2 = pose2matrix(pose)
-            T_m1_c2 = T_m1_m2.dot(T_m2_c2)
+                        T_m2_c2 = pose2matrix(pose)
+                        T_m1_c2 = T_m1_m2.dot(T_m2_c2)
 
-            R = Rotation.from_matrix(T_m1_c2[:3, :3])
-            q = R.as_quat()
-            t = T_m1_c2[:3, 3].T
-            pose = np.concatenate((t, q), axis=0)
-            poses = np.vstack((poses, pose))
+                        R = Rotation.from_matrix(T_m1_c2[:3, :3])
+                        q = R.as_quat()
+                        t = T_m1_c2[:3, 3].T
+                        pose = np.concatenate(([id],t, q), axis=0)
+                        poses_out.append(pose)
+                else:
+                    print('localization failed!')                    
 
-        np.savetxt(join(query_data_folder, 'localized_poses.csv'), poses, delimiter=',')
-        np.savetxt(join(query_data_folder, 'num_inliers.csv'), inliers, delimiter=',', fmt='%i')
+                I2_l = []
+                poses_l = []
+                id_l = []
+
+        poses_out = np.array(poses_out)
+
+        np.savetxt(join(out_folder, 'localized_poses.csv'), poses_out, delimiter=',')
+        np.savetxt(join(out_folder, 'num_inliers.csv'), inliers, delimiter=',', fmt='%i')
 
 
-def query_front_single(query_data_folder, localizer, retrieved_anchors=5):
+def query_front_single(query_data_folder, localizer, out_folder, retrieved_anchors=5, frame_rate=30, sample_rate=1, min_matches=50):
+
+        shutil.rmtree(out_folder,ignore_errors=True)
+        os.makedirs(out_folder,exist_ok=True)
+
+        skip_rate = int(frame_rate/sample_rate)
 
         query_img_dir = join(query_data_folder, 'rgb')
 
@@ -97,18 +130,26 @@ def query_front_single(query_data_folder, localizer, retrieved_anchors=5):
         else:
             raise Exception('No intrinsics file found')  
 
-        poses = np.empty((0, 7))
+        poses_out = np.empty((0, 8))
         inliers_l = []
 
         for num, filename in enumerate(sorted(os.listdir(query_img_dir))):
+
             ext = filename.split('.')[-1]
             if not (ext == 'jpg' or ext == 'png' or ext == 'JPG'):
                 continue
             id = int(filename.split('.')[0])
+
+            if id % skip_rate != 0:
+                continue
+
+            # if id not in [1,100,500,1000]:
+            #     continue                
+
             image_path = os.path.join(query_img_dir, filename)
             I2 = cv2.imread(image_path)
 
-            T_m1_c2, inliers = localizer.callback_query(I2, K2, retrieved_anchors=retrieved_anchors) 
+            T_m1_c2, inliers = localizer.callback_query(I2, K2, retrieved_anchors=retrieved_anchors, min_matches=min_matches) 
 
             if T_m1_c2 is None:
                 T_m1_c2 = np.eye(4)  
@@ -119,13 +160,11 @@ def query_front_single(query_data_folder, localizer, retrieved_anchors=5):
             R = Rotation.from_matrix(T_m1_c2[:3, :3])
             q = R.as_quat()
             t = T_m1_c2[:3, 3].T
-            pose = np.concatenate((t, q), axis=0)
-            poses = np.vstack((poses, pose))
+            pose = np.concatenate(([id],t, q), axis=0)
+            poses_out = np.vstack((poses_out, pose))
 
-
-
-        np.savetxt(join(query_data_folder, 'localized_poses.csv'), poses, delimiter=',')
-        np.savetxt(join(query_data_folder, 'num_inliers.csv'), inliers_l, delimiter=',', fmt='%i')
+        np.savetxt(join(out_folder, 'localized_poses.csv'), poses_out, delimiter=',')
+        np.savetxt(join(out_folder, 'num_inliers.csv'), inliers_l, delimiter=',', fmt='%i')
 
 
 def project_to_image(pcd_file,T_c1_m1,K,w,h,vis=None):
@@ -152,7 +191,7 @@ def project_to_image(pcd_file,T_c1_m1,K,w,h,vis=None):
 
     return img, vis
 
-def check_pose_estimation(pcd_file, pose, Ip, view = 1, imshow=True, fsave=None, K2=None, panorama=False, marker_file=None,show_results=True, marker_size=20):
+def check_pose_estimation(pcd_file, pose, Ip, view = 1, imshow=True, fsave=None, K2=None, panorama=False,show_results=True, marker_size=20):
     
     if panorama:
     
@@ -176,10 +215,7 @@ def check_pose_estimation(pcd_file, pose, Ip, view = 1, imshow=True, fsave=None,
         T_c2_m1 = T_inv(T_m1_c2)
 
 
-    if marker_file is not None:
-        e_scaled = measure_error(I2_front,T_c2_m1,K2,marker_file,view,panorama,marker_size)
-    else:
-        e_scaled = -1
+    e_scaled = measure_error(I2_front,T_c2_m1,K2,panorama,marker_size)
 
     if show_results:
         I2_pcd,_ = project_to_image(pcd_file, T_c2_m1, K2, I2_front.shape[1], I2_front.shape[0])
@@ -211,13 +247,11 @@ def check_pose_estimation(pcd_file, pose, Ip, view = 1, imshow=True, fsave=None,
 
     return e_scaled
 
-def check_all_poses(pcd_file,query_folder, out_folder,panorama=False,marker_file=None,show_results=True,results_prefix='',marker_size=20):
+def check_all_poses(pcd_file,query_folder, out_folder,panorama=False,show_results=True,results_prefix='',marker_size=20):
+    global img_i
+    img_i = 0
 
     query_imgs_folder=query_folder+'/rgb'
-
-    if show_results:
-        shutil.rmtree(out_folder,ignore_errors=True)
-        os.makedirs(out_folder,exist_ok=True)
 
     if not panorama:
         if os.path.exists(join(query_folder, 'K2.txt')):
@@ -232,29 +266,32 @@ def check_all_poses(pcd_file,query_folder, out_folder,panorama=False,marker_file
         K2 = None
 
     img_l = []
+    ext_type = 'jpg'
     for fname in sorted(os.listdir(query_imgs_folder)):
         ext = fname.split('.')[-1]
         if ext == 'jpg' or ext == 'png' or ext == 'JPG':
-            img_l.append(fname)
+            ext_type = ext
 
-    poses = np.loadtxt(join(query_folder,results_prefix+'localized_poses.csv'), delimiter=',')
+    poses = np.loadtxt(join(out_folder,results_prefix+'localized_poses.csv'), delimiter=',')
+    poses_dict = {int(pose[0]):pose[1:] for pose in poses}
+
     if panorama:
         views_l = [1,3,4]
     else:
         views_l = [1]
 
     error = []
-    for img_id in range(poses.shape[0]):
+    for img_id in poses_dict.keys():
         for view in views_l:
-            pose = poses[img_id,:]
-            Ip = cv2.imread(join(query_imgs_folder,'{}').format(img_l[img_id]))
+            pose = poses_dict[img_id]
+            Ip = cv2.imread(join(query_imgs_folder,f'{img_id}.{ext_type}'))
             e_scaled = check_pose_estimation(pcd_file, pose, Ip, view=view, imshow=False, fsave=join(out_folder,'out{}_{}.jpg'.format(img_id,view)), panorama=panorama, 
-                                  K2=K2, marker_file=marker_file,show_results=show_results, marker_size=marker_size)   
+                                  K2=K2,show_results=show_results, marker_size=marker_size)   
             error.append(e_scaled)
 
     return error
 
-def measure_error(Ip, T_c2_m1,K2, marker_file, view, panorama, marker_size):
+def measure_error(Ip, T_c2_m1,K2, panorama, marker_size):
     global img_i
     global data_folder
     if panorama:
@@ -268,13 +305,22 @@ def measure_error(Ip, T_c2_m1,K2, marker_file, view, panorama, marker_size):
         if len(marker_uv) == 0:
             return -1     
     else:
-        marker_uv = detect_markers(Ip,xy_array=True)
-        if len(marker_uv) == 0:
+        marker = detect_markers(Ip,xy_array=True)
+        if len(marker) == 0:
             return -1
-        marker_uv = marker_uv[0]['coords'].T    
+        marker_uv = marker[0]['coords'].T    
+        marker_id = marker[0]['id']
 
-    marker_3d = np.loadtxt(marker_file,delimiter=',')
-    marker_3d = marker_3d[:,1:]
+    # read json file to get marker 3d coordinates from marker id
+    marker_file = join(data_folder,'markers_dict.json')
+    with open(marker_file) as f:
+        markers = json.load(f)
+
+    if marker_id not in markers:
+        return -1
+
+    marker_3d = markers[marker_id]
+    marker_3d = np.array(marker_3d)
     marker_3d = np.array(marker_3d,dtype=np.float32)
 
     tvec, rvec = matrix2poses(T_inv(T_c2_m1))
@@ -290,39 +336,93 @@ def measure_error(Ip, T_c2_m1,K2, marker_file, view, panorama, marker_size):
     
     return e_scaled
 
+def find_markers_in_anchors(localizer, frame_rate=10, sampling_rate=1):
+
+    w = localizer.image_width
+    h = localizer.image_height
+    K1 = localizer.camera_matrix 
+
+    markers_dict = dict()
+
+    skip_rate = int(frame_rate/sampling_rate)
+
+    for img_idx in localizer.poses.keys():
+        
+        if img_idx % skip_rate != 0:
+            continue
+
+        I1 = localizer.load_rgb(img_idx)
+        D1 = localizer.load_depth(img_idx)
+        pose1 = localizer.get_pose(img_idx)
+
+        # detect markers
+        markers = detect_markers(I1,xy_array=True)
+        if len(markers) == 0:
+            continue
+        marker_id = markers[0]['id']
+        marker_uv = markers[0]['coords'].T           
+        marker_3d, valid_ind = project_2d_to_3d(marker_uv.T, D1, K1, pose1, w, h, return_valid_ind=True)     
+        
+        if len(valid_ind) == 0:
+            continue
+
+        if marker_3d.shape[1] != 4:
+            continue
+
+        markers_dict[marker_id] = marker_3d.tolist()
+           
+    ## save markers_dict to json file
+    with open(join(data_folder,'markers_dict.json'), 'w') as fp:
+        json.dump(markers_dict, fp)
+        
+def evaluate_localization(data_folder, query_folder, out_folder, marker_size, multiple=False, run_relocalization=True,
+                          retrieved_anchors=10, frame_rate=30, sample_rate=0.5):  
+
+    pcd_file = join(data_folder,'cloud.pcd')
+
+    # load localizer
+    n = load_localizer(data_folder)    
+
+    # find markers in anchors
+    find_markers_in_anchors(n)  
+
+    # localize query images
+    if multiple:
+        if run_relocalization:
+            query_front_multiple(query_folder,n,out_folder,base_link=True, retrieved_anchors=retrieved_anchors, 
+                                frame_rate=frame_rate, sample_rate=sample_rate, min_matches=1)
+    else:
+        if run_relocalization:
+            query_front_single(query_folder,n,out_folder, retrieved_anchors=retrieved_anchors, 
+                                frame_rate=frame_rate, sample_rate=sample_rate, min_matches=1)    
+
+    # evaluate error
+    error1 = check_all_poses(pcd_file,query_folder,out_folder,panorama=False,
+                            show_results=True,marker_size=marker_size)
+    with open(join(out_folder,'error.csv'), 'w') as f:
+        for ei in error1:
+            f.write(str(ei)+' ')
+        f.write('\n') 
+
+
 def main():
-    global img_i
     global data_folder
 
     # data_folder = '/home/zaid/datasets/iwshm2023_data/project_1'
     data_folder = '/home/zaid/datasets/iwshm2023_data/iphone/c034beb4bb_out'
-    query_front = '/home/zaid/datasets/iwshm2023_data/query'
+    query_folder = '/home/zaid/datasets/iwshm2023_data/drone'
     marker_size = 16.51 # cm
 
-    pcd_file = join(data_folder,'cloud.pcd')
-    marker_file = join(data_folder,'picking_list.txt')
-    out_folder1 = join(data_folder,'out1')
-    show_results=True
+    out_folder1 = join(query_folder,'out1')
+    out_folder2 = join(query_folder,'out2')
 
-    # # localize query images
-    n = load_localizer(data_folder)
-    query_front_single(query_front,n, retrieved_anchors=20)
-    # query_front_multiple(query_front,n,base_link=True, retrieved_anchors=20)
+    # evaluate ssl
+    evaluate_localization(data_folder, query_folder, out_folder2, marker_size, multiple=False, 
+                            retrieved_anchors=10, frame_rate=30, sample_rate=5)
 
-    # # panorama msl error
-    error_all = []
-    img_i = 0
-    error = []
-    # print('msl errors: '+d)
-    error = check_all_poses(pcd_file,query_front,out_folder1,panorama=False,marker_file=marker_file,
-                            show_results=show_results,marker_size=marker_size)
-    error_all.append(error)
-    with open(join(data_folder,'error_msl.csv'), 'w') as f:
-        for e in error_all:
-            for ei in e:
-                f.write(str(ei)+' ')
-            f.write('\n') 
-
+    # evaluate msl
+    # evaluate_localization(data_folder, query_folder, out_folder1, marker_size, multiple=True, 
+    #                         retrieved_anchors=10, frame_rate=30, sample_rate=1)    
 
 if __name__ == '__main__':
     main()

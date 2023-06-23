@@ -5,7 +5,7 @@ FROM python:3.9-slim
 RUN echo "deb http://deb.debian.org/debian bullseye-backports main" > /etc/apt/sources.list.d/backports.list
 # Some of the c libraries requires compilation
 RUN apt-get update && apt-get install -y --no-install-recommends -t bullseye-backports \
-    cmake git build-essential \
+    git build-essential \
     wget \
   && rm -rf /var/lib/apt/lists/*
 

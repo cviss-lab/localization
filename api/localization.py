@@ -172,6 +172,12 @@ class Localizer:
             print('\nPnP RANSAC solver failed..\n')
             return None,None 
 
+        num_inliers = len(inliers)
+
+        if num_inliers < min_matches:
+            print('\nNot enough inliers! Try again with another query image..\n')
+            return None,None 
+
         # find relocalized pose of query image relative to robot camera
         R_ = cv2.Rodrigues(rvecs)[0]
         R = R_.T
@@ -180,7 +186,6 @@ class Localizer:
         T_m1_c2[:3, :3] = R
         T_m1_c2[:3, 3] = C.reshape(-1)
 
-        num_inliers = len(inliers)
         print('\nInliers in View 1: {:d}' .format(num_inliers))
 
         return T_m1_c2, num_inliers
@@ -196,6 +201,9 @@ class Localizer:
         N = len(I2_l)
         max_retries = 4
 
+        T_m1_c2_l = []
+        num_inliers_l = []
+
         for k in range(N):
 
             pts2D_img = np.array([]).reshape(0,2)
@@ -209,6 +217,20 @@ class Localizer:
             pts2D_all.append(pts2D_img)
             pts3D_all.append(pts3D_img)
 
+
+            ## scale caluclations
+            # retval, rvecs, tvecs, inliers = cv2.solvePnPRansac(pts3D_img, pts2D_img, K2, None, flags=cv2.SOLVEPNP_P3P, reprojectionError=max_reproj_error, iterationsCount=10000)
+            # R_ = cv2.Rodrigues(rvecs)[0]
+            # R = R_.T
+            # C = -R_.T.dot(tvecs)
+            # T_m1_c2 = np.eye(4)
+            # T_m1_c2[:3, :3] = R
+            # T_m1_c2[:3, 3] = C.reshape(-1)
+            # T_m1_c2_l.append(T_m1_c2)
+
+            # num_inliers = len(inliers)            
+            # num_inliers_l.append(num_inliers)
+
         if np.sum([len(p) for p in pts2D_all]) < min_matches:
             print('\nNo anchors found! Try again with another query image..\n')  
             return None, None, None
@@ -216,7 +238,7 @@ class Localizer:
 
         for r in range(max_retries):
             
-            T_m1_m2,tvecs_l,rvecs_l,best_inlier_idxs= utils.multiviewSolvePnPRansac(pts3D_all, pts2D_all, poses_l, K2, max_reproj_error=max_reproj_error) 
+            T_m1_m2,tvecs_l,rvecs_l,best_inlier_idxs= utils.multiviewSolvePnPRansac(pts3D_all, pts2D_all, poses_l, K2, max_reproj_error=max_reproj_error) # extra_args=[T_m1_c2_l,num_inliers_l]
             
             len_best_inlier_idxs = sorted([len(inliers) for inliers in best_inlier_idxs], reverse=True)
             if len_best_inlier_idxs[1]/len_best_inlier_idxs[0] > second_inlier_ratio:
@@ -233,9 +255,13 @@ class Localizer:
             pts3D_all = [p[inliers] for p,inliers in zip(pts3D_all,best_inlier_idxs)]
             T_m1_m2,tvecs_l,rvecs_l=utils.multiviewSolvePnPOptimization(pts3D_all, pts2D_all, poses_l, K2, T_m1_m2) 
 
-        print('\nquery cameras localized!\n')  
 
         len_best_inlier_idxs = [len(inliers) for inliers in best_inlier_idxs]
+        if max(len_best_inlier_idxs) < min_matches:
+            print('\nNo anchors found! Try again with another query image..\n')  
+            return None, None
+        
+        print('\nquery cameras localized!\n')  
 
         for i in range(len(best_inlier_idxs)):
             print('Inliers in View {:d}: {:d}' .format(i, len(best_inlier_idxs[i])))
