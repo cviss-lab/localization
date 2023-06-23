@@ -41,6 +41,11 @@ Each project has the following architecture
 │   └── intrinsics.json  # camera intrinsics of reference camera
 └── ...
 ```
+## Sample Data
+Download this file, unzip it, then save the folder as `~/datasets/project_1`.
+
+Google drive link: ![sample dataset](https://drive.google.com/file/d/1yosTKMK7qdtyPpteEc6Dljv_n4YOv1xK/view?usp=sharing)
+
 ## API Examples
 Loading project: 
 ```
