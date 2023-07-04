@@ -49,6 +49,9 @@ class Localizer:
         self.rgb_dict = loader.load_imgs_dict(self.poses, "rgb")
         self.depth_dict = loader.load_imgs_dict(self.poses, "depth")        
         self.poses = loader.load_poses()
+        self.ret_img = None
+        self.query_img = None
+        self.still_running = False
 
         self.load_models()        
 
@@ -94,6 +97,7 @@ class Localizer:
         print('\nsimilarity score between anchor and query: %.4f' % scores[0])
         pts2D_all = np.array([]).reshape(0, 2)
         pts3D_all = np.array([]).reshape(0, 3)
+        valid_pairs = []
 
         for i, (p, s) in enumerate(zip(pairs, scores)):
 
@@ -151,32 +155,34 @@ class Localizer:
                 pts2D_all = np.vstack([pts2D_all, pts2D])
                 pts3D_all = np.vstack([pts3D_all, pts3D])
 
+                valid_pairs.append(ret_index)
+
             # self.draw_matches(I1, I2, kp1, kp2, matches)                  
 
-        return pts2D_all, pts3D_all
+        return pts2D_all, pts3D_all, valid_pairs
 
 
     def callback_query(self, I2, K2, max_reproj_error=8, retrieved_anchors=5, similarity_threshold=0.1, min_matches=50):
 
         print('query image recieved!')
 
-        pts2D_all, pts3D_all = self.find_correspondences(I2, retrieved_anchors, similarity_threshold)
+        pts2D_all, pts3D_all, valid_pairs = self.find_correspondences(I2, retrieved_anchors, similarity_threshold)
 
         if pts2D_all.shape[0] < min_matches:
             print('\nNo anchors found! Try again with another query image..\n')
-            return None,None 
+            return None,None,None
 
         retval, rvecs, tvecs, inliers = cv2.solvePnPRansac(pts3D_all, pts2D_all, K2, None, flags=cv2.SOLVEPNP_P3P, reprojectionError=max_reproj_error, iterationsCount=10000)
 
         if not retval:
             print('\nPnP RANSAC solver failed..\n')
-            return None,None 
+            return None,None,None
 
         num_inliers = len(inliers)
 
         if num_inliers < min_matches:
             print('\nNot enough inliers! Try again with another query image..\n')
-            return None,None 
+            return None,None,None
 
         # find relocalized pose of query image relative to robot camera
         R_ = cv2.Rodrigues(rvecs)[0]
@@ -188,7 +194,7 @@ class Localizer:
 
         print('\nInliers in View 1: {:d}' .format(num_inliers))
 
-        return T_m1_c2, num_inliers
+        return T_m1_c2, num_inliers, valid_pairs
 
     def callback_query_multiple(self, I2_l, poses_l, K2, 
                                 optimization=False, max_reproj_error=10,
@@ -212,7 +218,7 @@ class Localizer:
             print('\nProcessing view %i\n' % (k+1))
             I2 = I2_l[k]
 
-            pts2D_img, pts3D_img = self.find_correspondences(I2, retrieved_anchors, similarity_threshold)
+            pts2D_img, pts3D_img, valid_pairs = self.find_correspondences(I2, retrieved_anchors, similarity_threshold)
 
             pts2D_all.append(pts2D_img)
             pts3D_all.append(pts3D_img)
@@ -411,13 +417,4 @@ class Localizer:
         img = cv2.drawMatches(I1, kp1, I2, kp2, matches, None, flags=2)
         plt.imshow(cv2.cvtColor(img, cv2.COLOR_RGB2BGR)), plt.show()        
 
-if __name__ == '__main__':
-    data_folder = '/home/zaid/datasets/test_data/sample_data3'
-    localizer = Localizer(LocalLoader(data_folder))
-    # localizer.build_database()
 
-    I2 = cv2.imread('/home/zaid/datasets/rgb_47.png')
-    K2 = np.array([[6.380850830078125000e+02, 0.000000000000000000e+00, 6.356729736328125000e+02],
-                   [0.000000000000000000e+00, 6.363466796875000000e+02, 3.661477050781250000e+02],
-                   [0.000000000000000000e+00, 0.000000000000000000e+00, 1.000000000000000000e+00]])
-    T_m1_c2, len_best_inliers = localizer.callback_query(I2,K2)
