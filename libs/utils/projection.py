@@ -340,8 +340,11 @@ def cloud_to_depth(pcd, K, pose, w, h, point_size=2, s=1):
     Ks = s * K
     Ks[2, 2] = 1
     vis.update_view_point(Ks, T_c_m, znear=1e-4, zfar=65.536, point_size=point_size)
-    depth = vis.capture_depth_float_buffer(show=False)
+    depth = vis.capture_depth_float_buffer(show=False)    
     depth = np.array(np.asarray(depth) * 1000, dtype=np.uint16)
+
+    # depth = vis.capture_screen_float_buffer(show=True)
+    # depth = np.asarray(depth)*255
 
     return depth
 

@@ -113,8 +113,10 @@ def localize_request(project_id):
         res = {'success':False}
     else:
         pose = matrix2pose(T_m1_c2)
+        loc.query_pose = pose
         res = {'success':True, 'pose':tuple(pose.tolist()), 'inliers':inliers, 'ret_imgs':tuple(ret_idx)}
-        loc.ret_img = loc.load_rgb(ret_idx[0])
+        loc.ret_img = loc.load_rgb(ret_idx[0]) 
+        loc.ret_pose = loc.get_pose(ret_idx[0])
 
     loc.still_running = False
 

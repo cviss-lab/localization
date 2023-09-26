@@ -6,6 +6,7 @@ import numpy as np
 from PIL import Image
 import csv
 from scipy.spatial.transform import Rotation
+import json
 
 from libs.utils.loader import *
 from libs.utils.strayscanner import *
@@ -98,6 +99,74 @@ class PreProcessor:
                 point_size=3,
             )
             cv2.imwrite(os.path.join(output_dir, "depth/{:06}.png".format(i + 1)), D)
+
+    def from_one3d(self):
+
+        dataset_dir = self.input_dir
+        output_dir = self.output_dir        
+        
+
+        poses = []
+
+        # shutil.rmtree(output_dir, ignore_errors=True)
+        os.makedirs(os.path.join(output_dir, "rgb"))
+        os.makedirs(os.path.join(output_dir, "depth"))       
+
+        
+        with open(os.path.join(dataset_dir, 'intrinsics.json')) as f:
+            intrinsics = json.load(f)
+        camera_matrix = np.array(intrinsics["camera_matrix"])
+        w = float(intrinsics["width"])
+        h = float(intrinsics["height"])
+
+        pointcloud = self.loader.load_pc(os.path.join(dataset_dir, "cloud.ply"))
+        # o3d.visualization.draw_geometries([pointcloud])
+
+        with open(os.path.join(dataset_dir, 'poses.txt')) as f:
+            Lines = f.readlines()
+            
+        for i,l in enumerate(Lines):
+            print(f"Processing frame {i}", end="\r")
+            line = l.split(' ')
+            img = cv2.imread(os.path.join(dataset_dir, 'images', line[0]))
+
+            R = np.array(line[4:], dtype=np.float64).reshape(3,3).T
+            q = Rotation.from_matrix(R).as_quat()
+
+            poses.append(
+                [
+                    i,
+                    float(line[1]),
+                    float(line[2]),
+                    float(line[3]),
+                    q[0],
+                    q[1],
+                    q[2],
+                    q[3],
+                ]
+            )
+
+            D = cloud_to_depth(
+                pointcloud,
+                camera_matrix,
+                poses[-1][1:],
+                w=w,
+                h=h,
+                s=1,
+                point_size=2,
+            )
+            # print(D)
+            cv2.imwrite(os.path.join(output_dir, "rgb/{:06}.png".format(i + 1)), img)                        
+            cv2.imwrite(os.path.join(output_dir, "depth/{:06}.png".format(i + 1)), D)                        
+
+        with open(os.path.join(output_dir, "poses.csv"), mode="w") as file:
+            writer = csv.writer(file, delimiter=",")
+            for row in poses:
+                writer.writerow(row)
+
+        with open(os.path.join(output_dir, 'intrinsics.json')) as f:
+            json.dump(intrinsics, f)
+
 
     def from_stray_scanner(self, resize=1, voxel=0.015, filter_level=2):
         """

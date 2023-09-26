@@ -50,7 +50,9 @@ class Localizer:
         self.depth_dict = loader.load_imgs_dict(self.poses, "depth")        
         self.poses = loader.load_poses()
         self.ret_img = None
+        self.ret_pose = None
         self.query_img = None
+        self.query_pose = None
         self.still_running = False
 
         self.load_models()        
