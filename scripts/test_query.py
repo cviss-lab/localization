@@ -15,9 +15,9 @@ def send_query_image(url, I, project_id=1):
     files = {'image':data1}
     endpoint = url + f'/api/v1/project/{project_id}/localize'
     try:
-        response = requests.post(endpoint, files=files,timeout=0.0000000001) 
-        print(response)
-    except requests.exceptions.ReadTimeout: 
+        response = requests.post(endpoint, files=files,timeout=0.5) 
+        print(response.content)
+    except: 
         print('timeout')
         pass
 
@@ -33,22 +33,22 @@ def load_project(url, project_id=1):
     return True
 
 
-def main(dataset_dir, url):
+def main(dataset_dir, url, frame_rate):
     
     url = 'http://'+ url+':5000/'
 
     load_project(url)
 
-    img_l = sorted(os.listdir(os.path.join(dataset_dir , 'rgb')))
+    img_l = sorted(os.listdir(dataset_dir))
     k = 0
 
     while True:
-        time.sleep(0.2)
+        time.sleep(1.0/float(frame_rate))
         if k >= len(img_l):
             k = 0
-        f_image = os.path.join(dataset_dir , 'rgb', img_l[k])
+        f_image = os.path.join(dataset_dir , img_l[k])
         # f_image = os.path.join(dataset_dir , 'rgb', f'{i}.png')
-        I = cv2.cvtColor(cv2.imread(f_image), cv2.COLOR_RGB2BGR)
+        I = cv2.imread(f_image)
 
         send_query_image(url, I)
 
@@ -56,4 +56,4 @@ def main(dataset_dir, url):
 
 
 if __name__ == '__main__':
-    main(sys.argv[1], sys.argv[2])
+    main(sys.argv[1], sys.argv[2], sys.argv[3])

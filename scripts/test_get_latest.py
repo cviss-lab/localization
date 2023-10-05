@@ -36,8 +36,9 @@ def main(url):
     cv2.namedWindow('image', cv2.WINDOW_NORMAL)
     while True:
         img = get_latest(url)
-        cv2.imshow('image',img)   
-        cv2.waitKey(1)     
+        if img is not None:
+            cv2.imshow('image',img)   
+            cv2.waitKey(1)     
 
 
 if __name__ == '__main__':
