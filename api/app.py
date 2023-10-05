@@ -38,10 +38,46 @@ def get_latest(project_id):
     
     # NOTE: anomaly detection happens here
     if loc.query_img is not None and loc.ret_img is not None:        
-        I2 = cv2.hconcat([loc.query_img, loc.ret_img])
-        I2 = cv2.resize(I2, (1280, 480))
+        q_img1 = copy.deepcopy(loc.query_img)
+        q_img2 = copy.deepcopy(loc.query_img2)
+        r_img = copy.deepcopy(loc.ret_img)
+
+        r = 20
+        aq = project_3d_to_2d(loc.annotations, loc.query_camera_matrix, loc.query_pose)
+        ar = project_3d_to_2d(loc.annotations, loc.camera_matrix, loc.ret_pose)
+
+        aq = np.int32(aq.T.reshape((-1, 1, 2)))
+        ar = np.int32(ar.T.reshape((-1, 1, 2)))
+
+        
+        h,w = 360,360
+        pts_b= np.float32([ [0,0],[0,h-1],[w-1,h-1],[w-1,0] ]).reshape(-1,1,2)
+        M, _ = cv2.findHomography(aq, pts_b, cv2.RANSAC,5.0)
+        aq_img = cv2.warpPerspective(q_img2, M, (w,h)) 
+
+        M, _ = cv2.findHomography(ar, pts_b, cv2.RANSAC,5.0)
+        ar_img = cv2.warpPerspective(r_img, M, (w,h))    
+
+        roi = cv2.hconcat([aq_img, ar_img])           
+
+        # for a in list(aq.T):
+        #     cv2.circle(q_img2, (int(a[0]), int(a[1])), radius=r, color=(255, 0, 0), thickness=r)
+
+        # for a in list(ar.T):
+        #     cv2.circle(r_img, (int(a[0]), int(a[1])), radius=r, color=(255, 0, 0), thickness=r)
+
+        cv2.polylines(q_img2, [aq], True, color=(255, 0, 0), thickness=r)
+        cv2.polylines(r_img,  [ar], True, color=(255, 0, 0), thickness=r)
+
+        r_img = cv2.resize(r_img, (q_img2.shape[1], q_img2.shape[0]))
+        I2 = cv2.hconcat([q_img2, r_img])
+        I2 = cv2.resize(I2, (1920, 720))
+
+        I2[I2.shape[0]-roi.shape[0] : I2.shape[0], int(I2.shape[1]/2-roi.shape[1]/2) : int(I2.shape[1]/2+roi.shape[1]/2)] = roi
+      
+        
     else:
-        I2 = np.zeros((480, 1280, 3), dtype=np.uint8)
+        I2 = np.zeros((480, 1920, 3), dtype=np.uint8)
 
     data = cv2.imencode('.png', I2)[1].tobytes()
     resp = flask.make_response(data)
@@ -62,6 +98,10 @@ def load_project(project_id):
     localizers[project_id] = loc
     intrinsics[project_id] = loc.camera_matrix
     print(f'Loaded project {project_id}')    
+
+    # load annotations
+    loc.annotations = np.loadtxt(os.path.join(loc.data_dir, 'annotations.txt'), delimiter=',').reshape((-1,3))
+
     return flask.make_response("Project loaded successfully")
 
 @app.route("/api/v1/project/<int:project_id>/intrinsics", methods=["POST"])
@@ -97,24 +137,30 @@ def localize_request(project_id):
         return flask.make_response("Image not found", 404)
      
     img = np.array(img)        
+    img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
 
     loc = localizers[project_id]
 
     loc.query_img = img
+    loc.query_camera_matrix = camera_matrix
 
     if loc.still_running:
         res = {'success':False}
         return flask.make_response(res)
+
     
     loc.still_running = True
     
-    T_m1_c2, inliers, ret_idx = loc.callback_query(img, camera_matrix)
+    T_m1_c2, inliers, ret_idx = loc.callback_query(img, camera_matrix, retrieved_anchors=10)
     if T_m1_c2 is None:
         res = {'success':False}
     else:
         pose = matrix2pose(T_m1_c2)
+        loc.query_pose = pose
         res = {'success':True, 'pose':tuple(pose.tolist()), 'inliers':inliers, 'ret_imgs':tuple(ret_idx)}
-        loc.ret_img = loc.load_rgb(ret_idx[0])
+        loc.ret_img = loc.load_rgb(ret_idx[0]) 
+        loc.ret_pose = loc.get_pose(ret_idx[0])
+        loc.query_img2 = img
 
     loc.still_running = False
 

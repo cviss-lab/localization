@@ -4,8 +4,10 @@ FROM python:3.9-slim
 # python:3.9 is based on). So we have to use the backport repository
 RUN echo "deb http://deb.debian.org/debian bullseye-backports main" > /etc/apt/sources.list.d/backports.list
 # Some of the c libraries requires compilation
+RUN apt-get update && \
+    apt-get upgrade -y && \
+    apt-get install -y git
 RUN apt-get update && apt-get install -y --no-install-recommends -t bullseye-backports \
-    git build-essential \
     wget \
   && rm -rf /var/lib/apt/lists/*
 
@@ -18,7 +20,7 @@ ENV PYTHONUNBUFFERED 1
 # build open3d
 COPY ./localization/api/requirements.txt .
 COPY ./localization/dockerfiles/api/build_open3d.sh /
-# RUN /build_open3d.sh
+#RUN /build_open3d.sh
 
 # install dependencies
 RUN pip install --upgrade pip

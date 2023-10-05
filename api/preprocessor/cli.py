@@ -93,7 +93,9 @@ if __name__ == "__main__":
         preprocessor.from_mobile_inspector()
     # load lidar dataset
     elif lidar:
-        preprocessor.from_lidar()
+        # preprocessor.from_lidar()
+        preprocessor.from_one3d()
+
 
     # complete depth maps using pointcloud for missing points
     if depth_fill:

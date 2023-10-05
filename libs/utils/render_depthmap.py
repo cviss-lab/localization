@@ -1,13 +1,14 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import sys
+import time
 try:
-    import open3d as o3d
+    import open3d as o3d    
 except:
     pass
 
 class VisOpen3D:
-    def __init__(self, width=1920, height=1080, visible=True):
+    def __init__(self, width=1920, height=1080, intrinsic=None, visible=True):
 
         if 'open3d' not in sys.modules:
             raise ImportError('Open3D not installed')
@@ -16,6 +17,11 @@ class VisOpen3D:
         self.__vis.create_window(width=width, height=height, visible=visible)
         self.__width = width
         self.__height = height
+        ctr = self.__vis.get_view_control()
+        if intrinsic is not None:
+            param = self.convert_to_open3d_param(intrinsic, np.eye(4))
+            ctr.convert_from_pinhole_camera_parameters(param, allow_arbitrary=True)  
+            self.__vis.update_renderer()      
 
         if visible:
             self.poll_events()
