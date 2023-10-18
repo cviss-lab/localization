@@ -29,8 +29,8 @@ def load_args():
         args = yaml.safe_load(f)
     return args
 
-def main(url):
-    
+def main():
+    url = 'localhost'
     url = 'http://'+ url+':5000/'
 
     cv2.namedWindow('image', cv2.WINDOW_NORMAL)
@@ -42,4 +42,4 @@ def main(url):
 
 
 if __name__ == '__main__':
-    main(sys.argv[1])
+    main()
