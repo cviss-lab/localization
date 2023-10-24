@@ -49,6 +49,8 @@ class Localizer:
         self.rgb_dict = loader.load_imgs_dict(self.poses, "rgb")
         self.depth_dict = loader.load_imgs_dict(self.poses, "depth")        
         self.poses = loader.load_poses()
+        self.annotations = loader.load_annotations()
+        # self.annotations = None
 
         # anomally detection
         self.ret_img = None
@@ -56,8 +58,7 @@ class Localizer:
         self.query_img = None
         self.query_img2 = None
         self.query_pose = None
-        self.query_camera_matrix = None
-        self.annotations = None
+        self.query_camera_matrix = None        
         self.still_running = False
 
         self.load_models()        

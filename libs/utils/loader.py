@@ -50,6 +50,13 @@ class Loader(abc.ABC):
         with self.load_file(filename) as path:
             P_plan = np.loadtxt(path, delimiter=',')
             return P_plan
+        
+
+    def load_annotations(self, filename = 'annotations.json'):
+        with self.load_file(filename) as path:
+            with open(path) as f:
+                annotations = json.load(f)
+        return annotations["annotations"]
 
 
     def load_gnd_pts(self, filename: str = "picking_list.txt") -> GroundPoints:

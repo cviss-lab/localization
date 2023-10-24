@@ -33,8 +33,9 @@ def load_project(url, project_id=1):
     return True
 
 
-def main(dataset_dir, url, frame_rate):
+def main(dataset_dir, frame_rate=1):
     
+    url = 'localhost'
     url = 'http://'+ url+':5000/'
 
     load_project(url)
@@ -56,4 +57,4 @@ def main(dataset_dir, url, frame_rate):
 
 
 if __name__ == '__main__':
-    main(sys.argv[1], sys.argv[2], sys.argv[3])
+    main(sys.argv[1])

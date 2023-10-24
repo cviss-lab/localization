@@ -34,48 +34,72 @@ app.logger.info("API server ready")
 @app.route('/api/v1/project/<int:project_id>/get_latest', methods=["GET"])
 def get_latest(project_id):
 
+    if len(localizers.keys()) == 0:
+        return flask.make_response("no project loaded", 404)
+
     loc = localizers[project_id]
     
     # NOTE: anomaly detection happens here
-    if loc.query_img is not None and loc.ret_img is not None:        
-        q_img1 = copy.deepcopy(loc.query_img)
-        q_img2 = copy.deepcopy(loc.query_img2)
+    if loc.query_img is not None and \
+       loc.ret_img is not None or \
+       len(loc.annotations)==0:  
+
+        q_img = copy.deepcopy(loc.query_img2)
         r_img = copy.deepcopy(loc.ret_img)
 
-        r = 20
-        aq = project_3d_to_2d(loc.annotations, loc.query_camera_matrix, loc.query_pose)
-        ar = project_3d_to_2d(loc.annotations, loc.camera_matrix, loc.ret_pose)
+        d0 = np.inf
+        for annot in loc.annotations:
 
-        aq = np.int32(aq.T.reshape((-1, 1, 2)))
-        ar = np.int32(ar.T.reshape((-1, 1, 2)))
+            pts_3d = np.array(annot['points_3d'])
+            aq = project_3d_to_2d(pts_3d, loc.query_camera_matrix, loc.query_pose)
+            ar = project_3d_to_2d(pts_3d, loc.camera_matrix, loc.ret_pose)
 
-        
-        h,w = 360,360
-        pts_b= np.float32([ [0,0],[0,h-1],[w-1,h-1],[w-1,0] ]).reshape(-1,1,2)
-        M, _ = cv2.findHomography(aq, pts_b, cv2.RANSAC,5.0)
-        aq_img = cv2.warpPerspective(q_img2, M, (w,h)) 
+            aq_c = np.int32(aq.mean(axis=1))
+            ar_c = np.int32(ar.mean(axis=1))
 
-        M, _ = cv2.findHomography(ar, pts_b, cv2.RANSAC,5.0)
-        ar_img = cv2.warpPerspective(r_img, M, (w,h))    
+            aq = np.int32(aq.T.reshape((-1, 1, 2)))
+            ar = np.int32(ar.T.reshape((-1, 1, 2)))            
 
-        roi = cv2.hconcat([aq_img, ar_img])           
+            roi_h, roi_w = 360,360
+            
+            pts_b= np.float32([ [0,0],[0,roi_h-1],[roi_w-1,roi_h-1],[roi_w-1,0] ]).reshape(-1,1,2)
+            M, _ = cv2.findHomography(aq, pts_b, cv2.RANSAC,5.0)
+            aq_img = cv2.warpPerspective(q_img, M, (roi_w,roi_h)) 
 
-        # for a in list(aq.T):
-        #     cv2.circle(q_img2, (int(a[0]), int(a[1])), radius=r, color=(255, 0, 0), thickness=r)
+            M, _ = cv2.findHomography(ar, pts_b, cv2.RANSAC,5.0)
+            ar_img = cv2.warpPerspective(r_img, M, (roi_w,roi_h))   
 
-        # for a in list(ar.T):
-        #     cv2.circle(r_img, (int(a[0]), int(a[1])), radius=r, color=(255, 0, 0), thickness=r)
+            t1 = int(20 * q_img.shape[1] / 2000)
+            t2 = int(20 * r_img.shape[1] / 2000)
+            cv2.polylines(q_img, [aq], True, color=(255, 0, 0), thickness=t1)
+            cv2.polylines(r_img,  [ar], True, color=(255, 0, 0), thickness=t2)
 
-        cv2.polylines(q_img2, [aq], True, color=(255, 0, 0), thickness=r)
-        cv2.polylines(r_img,  [ar], True, color=(255, 0, 0), thickness=r)
+            annot_text = str(annot['idx'])
+            t1 = int(t1*0.4)
+            t2 = int(t2*0.4)
+            s1 = np.float32(2.0 * q_img.shape[1] / 2000)
+            s2 = np.float32(2.0 * r_img.shape[1] / 2000)
+            cv2.putText(q_img, annot_text, (aq_c[0], aq_c[1]), cv2.FONT_HERSHEY_SIMPLEX ,  
+                   s1, (0, 0, 255), t1, cv2.LINE_AA)
+            cv2.putText(r_img, annot_text, (ar_c[0], ar_c[1]), cv2.FONT_HERSHEY_SIMPLEX ,  
+                   s2, (0, 0, 255), t2, cv2.LINE_AA)            
 
-        r_img = cv2.resize(r_img, (q_img2.shape[1], q_img2.shape[0]))
-        I2 = cv2.hconcat([q_img2, r_img])
+            di = np.linalg.norm(pts_3d.mean(axis=1)-loc.query_pose[:3])
+            if di<d0:
+                d0 = di
+                t = 7
+                cv2.putText(ar_img, annot_text, (30, 60), cv2.FONT_HERSHEY_SIMPLEX ,  
+                    2, (0, 0, 255), t, cv2.LINE_AA)
+                cv2.putText(aq_img, annot_text, (30, 60), cv2.FONT_HERSHEY_SIMPLEX ,  
+                    2, (0, 0, 255), t, cv2.LINE_AA)                
+                roi = cv2.hconcat([aq_img, ar_img])                           
+                
+        r_img = cv2.resize(r_img, (q_img.shape[1], q_img.shape[0]))
+        I2 = cv2.hconcat([q_img, r_img])
         I2 = cv2.resize(I2, (1920, 720))
 
         I2[I2.shape[0]-roi.shape[0] : I2.shape[0], int(I2.shape[1]/2-roi.shape[1]/2) : int(I2.shape[1]/2+roi.shape[1]/2)] = roi
-      
-        
+              
     else:
         I2 = np.zeros((480, 1920, 3), dtype=np.uint8)
 
@@ -100,7 +124,7 @@ def load_project(project_id):
     print(f'Loaded project {project_id}')    
 
     # load annotations
-    loc.annotations = np.loadtxt(os.path.join(loc.data_dir, 'annotations.txt'), delimiter=',').reshape((-1,3))
+    # loc.annotations = np.loadtxt(os.path.join(loc.data_dir, 'annotations.txt'), delimiter=',').reshape((-1,3))
 
     return flask.make_response("Project loaded successfully")
 
