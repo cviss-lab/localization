@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import uuid
 import shutil
+import requests
 
 from hloc.matchers import loftr
 from hloc import extract_features, match_features
@@ -50,6 +51,7 @@ class Localizer:
         self.depth_dict = loader.load_imgs_dict(self.poses, "depth")        
         self.poses = loader.load_poses()
         self.annotations = loader.load_annotations()
+        self.annotated_image = np.zeros((480, 1920, 3), dtype=np.uint8)
         # self.annotations = None
 
         # anomally detection
@@ -426,3 +428,111 @@ class Localizer:
         plt.imshow(cv2.cvtColor(img, cv2.COLOR_RGB2BGR)), plt.show()        
 
 
+    def annotate_query_image(self):    
+    
+        # NOTE: anomaly detection happens here
+        if self.query_img is not None and \
+        self.ret_img is not None or \
+        len(self.annotations)==0:  
+
+            q_img = copy.deepcopy(self.query_img2)
+            r_img = copy.deepcopy(self.ret_img)
+            q_img2 = copy.deepcopy(self.query_img2)
+            r_img2 = copy.deepcopy(self.ret_img)        
+
+            d0 = np.inf
+            roi = None
+            for annot in self.annotations:
+
+                pts_3d = np.array(annot['points_3d'])
+                aq = project_3d_to_2d(pts_3d, self.query_camera_matrix, self.query_pose)
+                ar = project_3d_to_2d(pts_3d, self.camera_matrix, self.ret_pose)
+
+                if not check_visible(aq, q_img.shape[1], q_img.shape[0]) or not check_visible(ar, r_img.shape[1], r_img.shape[0]):
+                    annot_visible = False
+                else:
+                    annot_visible = True
+
+                if not check_if_ccw(aq) or not check_if_ccw(ar):
+                    continue
+
+                aq_c = np.int32(aq.mean(axis=1))
+                ar_c = np.int32(ar.mean(axis=1))
+
+                aq = np.int32(aq.T.reshape((-1, 1, 2)))
+                ar = np.int32(ar.T.reshape((-1, 1, 2)))            
+
+                roi_h, roi_w = 360,360
+                
+                pts_b= np.float32([ [0,0],[0,roi_h-1],[roi_w-1,roi_h-1],[roi_w-1,0] ]).reshape(-1,1,2)
+                M, _ = cv2.findHomography(aq, pts_b, cv2.RANSAC,5.0)
+                aq_img = cv2.warpPerspective(q_img2, M, (roi_w,roi_h)) 
+
+                M, _ = cv2.findHomography(ar, pts_b, cv2.RANSAC,5.0)
+                ar_img = cv2.warpPerspective(r_img2, M, (roi_w,roi_h))   
+
+                t1 = int(20 * q_img.shape[1] / 2000)
+                t2 = int(20 * r_img.shape[1] / 2000)
+                cv2.polylines(q_img, [aq], True, color=(255, 0, 0), thickness=t1)
+                cv2.polylines(r_img,  [ar], True, color=(255, 0, 0), thickness=t2)
+
+                annot_text = str(annot['idx'])
+                t1 = int(t1*0.4)
+                t2 = int(t2*0.4)
+                s1 = np.float32(2.0 * q_img.shape[1] / 2000)
+                s2 = np.float32(2.0 * r_img.shape[1] / 2000)
+                cv2.putText(q_img, annot_text, (aq_c[0], aq_c[1]), cv2.FONT_HERSHEY_SIMPLEX ,  
+                    s1, (0, 0, 255), t1, cv2.LINE_AA)
+                cv2.putText(r_img, annot_text, (ar_c[0], ar_c[1]), cv2.FONT_HERSHEY_SIMPLEX ,  
+                    s2, (0, 0, 255), t2, cv2.LINE_AA)            
+
+                di = np.linalg.norm(pts_3d.mean(axis=1)-self.query_pose[:3])
+                if di<d0:
+
+                    if not annot_visible:
+                        continue
+
+                    d0 = di
+
+                    aq_img0 = copy.copy(aq_img)
+                    ar_img0 = copy.copy(ar_img)
+                    annot_text0=annot_text                          
+
+                    t = 7
+                    cv2.putText(ar_img, annot_text, (30, 60), cv2.FONT_HERSHEY_SIMPLEX ,  
+                        2, (0, 0, 255), t, cv2.LINE_AA)
+                    cv2.putText(aq_img, annot_text, (30, 60), cv2.FONT_HERSHEY_SIMPLEX ,  
+                        2, (0, 0, 255), t, cv2.LINE_AA)                
+                    roi = cv2.hconcat([aq_img, ar_img]) 
+                    annot_text0=annot_text                          
+                    
+            r_img = cv2.resize(r_img, (960, 720))
+            q_img = cv2.resize(q_img, (960, 720))
+
+            I2 = cv2.hconcat([q_img, r_img])
+            cv2.putText(I2, 'Current Inspection', (20, 60), cv2.FONT_HERSHEY_SIMPLEX ,  
+                2, (0, 0, 0), t, cv2.LINE_AA) 
+            cv2.putText(I2, 'Previous Inspection', (980, 60), cv2.FONT_HERSHEY_SIMPLEX ,  
+                2, (0, 0, 0), t, cv2.LINE_AA)         
+
+            if roi is not None:
+                I2[I2.shape[0]-roi.shape[0] : I2.shape[0], int(I2.shape[1]/2-roi.shape[1]/2) : int(I2.shape[1]/2+roi.shape[1]/2)] = roi
+                send_to_visualizer(annot_text0, q_img, r_img, aq_img0, ar_img0)        
+
+            self.annotated_image = I2
+
+def send_to_visualizer(annot_id, Q, R, q, r, host='localhost', port=5001):
+
+    Q_ = cv2.imencode('.jpg', Q)[1].tobytes()
+    R_ = cv2.imencode('.jpg', R)[1].tobytes()
+    q_ = cv2.imencode('.jpg', q)[1].tobytes()
+    r_ = cv2.imencode('.jpg', r)[1].tobytes()
+
+    files = {'idx':annot_id, 'Q':Q_, 'R':R_, 'q': q_, 'r':r_}
+    endpoint = 'http://{host}:{port}/visualize'.format(host=host, port=port)
+
+    try:
+        response = requests.post(endpoint, files=files, timeout=0.01) 
+    except: 
+        print('cannot send defect images to visualizer')
+        pass  

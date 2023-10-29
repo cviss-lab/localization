@@ -63,3 +63,17 @@ Sending raw data in zip file to localization server
 ```
 curl -X POST -H "Content-Type: application/octet-stream" -F "data=@<path-to-zip>" http://localhost:5000/api/v1/project/1/upload
 ```
+
+## Example: previous annotations visualization
+Terminal 1: start localization server
+```
+docker compose up
+```
+Terminal 2: run script to send query images from folder
+```
+python scripts/test_query.py /home/uwcviss/datasets/CellTowerImages_trial_2/images
+```
+Terminal 3: start opencv visualization (optional)
+```
+python scripts/test_get_latest.py 
+```
