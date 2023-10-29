@@ -296,7 +296,7 @@ def send_to_visualizer(annot_id, Q, R, q, r, host='localhost', port=5001):
     q_ = cv2.imencode('.jpg', q)[1].tobytes()
     r_ = cv2.imencode('.jpg', r)[1].tobytes()
 
-    files = {'annot_id':annot_id, 'Q':Q_, 'R':R_, 'q': q_, 'r':r_}
+    files = {'idx':annot_id, 'Q':Q_, 'R':R_, 'q': q_, 'r':r_}
     endpoint = 'http://{host}:{port}/send_defect_images'.format(host=host, port=port)
 
     try:
