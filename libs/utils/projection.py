@@ -394,6 +394,20 @@ def depth_to_cloud(color, depth, K, pose, save_path=None):
 
     return pcd
 
+def check_if_ccw(pts_2d):
+    """
+    checks if points are counter clockwise
+    :param: numpy array (2, n) where n is the number of points
+    :return bool:
+    """
+    y = pts_2d[0, :]
+    x = pts_2d[1, :]
+    vec1 = np.array([x[1] - x[0], y[1] - y[0]])
+    vec2 = np.array([x[2] - x[1], y[2] - y[1]])
+    cross = np.cross(vec1, vec2)
+    return cross > 0
+    
+    
 
 def project_3d_to_2d(pts_3d, K, pose):
     """
