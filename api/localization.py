@@ -523,12 +523,12 @@ class Localizer:
 
 def send_to_visualizer(annot_id, Q, R, q, r, host='localhost', port=5001):
 
-    Q_ = cv2.imencode('.jpg', Q)[1].tobytes()
-    R_ = cv2.imencode('.jpg', R)[1].tobytes()
-    q_ = cv2.imencode('.jpg', q)[1].tobytes()
-    r_ = cv2.imencode('.jpg', r)[1].tobytes()
+    Q_ = cv2.imencode('.jpg', cv2.cvtColor(Q, cv2.COLOR_BGR2RGB))[1].tobytes()
+    R_ = cv2.imencode('.jpg', cv2.cvtColor(R, cv2.COLOR_BGR2RGB))[1].tobytes()
+    q_ = cv2.imencode('.jpg', cv2.cvtColor(q, cv2.COLOR_BGR2RGB))[1].tobytes()
+    r_ = cv2.imencode('.jpg', cv2.cvtColor(r, cv2.COLOR_BGR2RGB))[1].tobytes()
 
-    files = {'idx':annot_id, 'Q':Q_, 'R':R_, 'q': q_, 'r':r_}
+    files = {'idx': json.dumps({'idx': annot_id}), 'Q': Q_, 'R': R_, 'q': q_, 'r': r_}
     endpoint = 'http://{host}:{port}/visualize'.format(host=host, port=port)
 
     try:
