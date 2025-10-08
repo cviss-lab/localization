@@ -2,12 +2,12 @@ FROM python:3.9-slim
 
 # open3d requires cmake 3.20, which isn't available on debian bullseye (the os
 # python:3.9 is based on). So we have to use the backport repository
-RUN echo "deb http://deb.debian.org/debian bullseye-backports main" > /etc/apt/sources.list.d/backports.list
+# RUN echo "deb http://deb.debian.org/debian bullseye-backports main" > /etc/apt/sources.list.d/backports.list
 # Some of the c libraries requires compilation
 RUN apt-get update && \
     apt-get upgrade -y && \
     apt-get install -y git
-RUN apt-get update && apt-get install -y --no-install-recommends -t bullseye-backports \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
   && rm -rf /var/lib/apt/lists/*
 
